@@ -6,3 +6,5 @@ In a clipname type for example ()SMW Hello world
 On an instrument track put a drumrack on the second position. (put an fx selector for example before it)
 Now on that track write in a clipname ()LDR nameofyourdrumrackpreset
 This will change the drumrack for that track
+
+Set the BPM with ()BPM 128 for example 60.04 (doubles work also)

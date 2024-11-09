@@ -47,6 +47,10 @@ public class BitXExtension extends ControllerExtension {
     public void init() {
         final ControllerHost host = getHost();
         transport = host.createTransport();
+        transport.tempo().value().addValueObserver(value -> {
+            // Optionally, print the current tempo for debugging purposes
+            host.println("Initial tempo value (normalized): " + value);
+        });
         drumPresetsPath = Paths.get(System.getProperty("user.home"), "Documents", "Bitwig Studio", "Library", "Presets", "Drum Machine").toString();
 
         // Initialize preferences
@@ -209,14 +213,27 @@ public class BitXExtension extends ControllerExtension {
     
     private void setBpm(String bpmString) {
         try {
-            double bpm = Double.parseDouble(bpmString); // Parse the BPM from the argument
-           transport.tempo().set(bpm); // Access the SettableRangedValue
-            //tempoValue.set(bpm); // Set the tempo to the specified BPM
-            getHost().println("BPM set to: " + bpm);
+            double targetBpm = Double.parseDouble(bpmString); // Parse the target BPM from the argument
+
+            // Define the actual min and max BPM range in Bitwig
+            double minBpm = 20.0;
+            double maxBpm = 666.0;
+
+            // Ensure target BPM is within the allowed range
+            targetBpm = Math.max(minBpm, Math.min(maxBpm, targetBpm));
+
+            // Map target BPM to the normalized range [0.0, 1.0]
+            double targetNormalizedValue = (targetBpm - minBpm) / (maxBpm - minBpm);
+
+            // Apply the normalized tempo value explicitly to allow both increase and decrease
+            transport.tempo().value().set(targetNormalizedValue);
+
+            getHost().println("BPM set to: " + targetBpm + " (Normalized: " + targetNormalizedValue + ")");
         } catch (NumberFormatException e) {
             getHost().println("Invalid BPM value: " + bpmString);
         }
     }
+
 
 
     
