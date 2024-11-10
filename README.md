@@ -24,3 +24,5 @@ Available commands at this time:
 
 ()LIR "presetname" -> Load Instrument Rack -> will select the preset in an instrument rack. This is a Bitwig preset you save from any plugin you want to use.
 
+()SPN "Message" -> Show a popup Message that dissapears after a few seconds
+

@@ -82,6 +82,7 @@ public class BitXExtension extends ControllerExtension {
         commands.put("LDR", (arg, trackIndex) -> executeLDRCommand(host, drumPresetsPath, arg, deviceBanks[trackIndex]));
         commands.put("BPM", (arg, trackIndex) -> setBpm(arg));
         commands.put("LIR", (arg, trackIndex) -> selectInstrumentInLayer(host, arg, trackIndex));
+        commands.put("SPN", (arg, trackIndex) -> showPopupNotification(host, arg));
 
         initializeTrackAndClipObservers(host);
         host.showPopupNotification("BitX Initialized");
@@ -214,6 +215,9 @@ public class BitXExtension extends ControllerExtension {
             this.argument = argument;
         }
     }
+    
+
+    
 
     @FunctionalInterface
     private interface CommandExecutor {
@@ -267,6 +271,10 @@ public class BitXExtension extends ControllerExtension {
         } catch (NumberFormatException e) {
             getHost().println("Invalid BPM value: " + bpmString);
         }
+    }
+    
+    private void showPopupNotification(ControllerHost host, String text) {
+        host.showPopupNotification(text);
     }
 
     @Override
