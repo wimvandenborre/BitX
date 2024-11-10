@@ -17,7 +17,10 @@ This will change the drumrack for that track
 Available commands at this time:
 
 ()BMP "bpm" -> changes the bpm
+
 ()SMW "message" -> Show Message Window -> displays a message in a popupwindow
+
 ()LDR "presetname" -> Load Drum Rack -> Replaces your existing drum rack in second position, the drum rack presets need to be in your /Library/Presets/Drum Machine folder
+
 ()LIR "presetname" -> Load Instrument Rack -> will select the preset in an instrument rack. This is a Bitwig preset you save from any plugin you want to use.
 
