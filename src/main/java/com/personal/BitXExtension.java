@@ -12,18 +12,19 @@ import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.*;
 
 public class BitXExtension extends ControllerExtension {
-    private static  int MAX_TRACKS = 16;
-    private static  int MAX_SCENES = 128;
-    private static  int MAX_LAYERS = 16;
+    private static int MAX_TRACKS = 32;
+    private static int MAX_SCENES = 128;
+    private static int MAX_LAYERS = 32;
 
     private TrackBank trackBank;
     private Bitmap textWindowBitmap;
     private String drumPresetsPath;
     private Transport transport;
 
-    private DeviceBank[] deviceBanks = new DeviceBank[MAX_TRACKS];
-    private DeviceLayerBank[] layerBanks = new DeviceLayerBank[MAX_TRACKS];
-    private ChainSelector[] chainSelectors = new ChainSelector[MAX_TRACKS];
+    private DeviceBank[] deviceBanks;
+    private DeviceLayerBank[] layerBanks;
+    private ChainSelector[] chainSelectors;
+    private DeviceBank[][] layerDeviceBanks;
 
     private Preferences prefs;
     private SettableRangedValue widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
@@ -52,8 +53,8 @@ public class BitXExtension extends ControllerExtension {
         widthSetting = prefs.getNumberSetting("Bitmap Width", "Display", 40, 5000, 1, "pixels", 3024);
         heightSetting = prefs.getNumberSetting("Bitmap Height", "Display", 40, 5000, 1, "pixels", 120);
         tracknNumberSetting = prefs.getNumberSetting("Number of tracks", "Display", 1, 128, 1, "tracks", 32);
-        sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 1024);
-        layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 128);
+        sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 128);
+        layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
 
         int bitmapWidth = (int) widthSetting.getRaw();
         if (bitmapWidth == 0) bitmapWidth = 3024;
@@ -64,6 +65,12 @@ public class BitXExtension extends ControllerExtension {
         MAX_SCENES = (int) sceneNumberSetting.getRaw();
         if (MAX_SCENES == 0) MAX_SCENES = 128;
         MAX_LAYERS = (int) layerNumberSetting.getRaw();
+
+        // Initialize dynamic arrays based on preferences
+        deviceBanks = new DeviceBank[MAX_TRACKS];
+        layerBanks = new DeviceLayerBank[MAX_TRACKS];
+        chainSelectors = new ChainSelector[MAX_TRACKS];
+        layerDeviceBanks = new DeviceBank[MAX_TRACKS][MAX_LAYERS];
 
         textWindowBitmap = host.createBitmap(bitmapWidth, bitmapHeight, BitmapFormat.RGB24_32);
         trackBank = host.createTrackBank(MAX_TRACKS, 0, MAX_SCENES, true);
@@ -93,6 +100,9 @@ public class BitXExtension extends ControllerExtension {
             for (int j = 0; j < maxLayers; j++) {
                 final int layerIndex = j;
                 DeviceLayer layer = layerBanks[trackIndex].getItemAt(layerIndex);
+
+                // Initialize layer device banks
+                layerDeviceBanks[trackIndex][layerIndex] = layer.createDeviceBank(1);
 
                 // Observe layer name and store it in the map
                 layer.name().addValueObserver(layerName -> {
@@ -148,7 +158,15 @@ public class BitXExtension extends ControllerExtension {
         if (layerIndex != null) {
             selector.activeChainIndex().set(layerIndex);
             layerBank.getItemAt(layerIndex).selectInEditor();
-            host.println("Instrument layer selected: " + instrumentName);
+
+            // Select the device in the selected layer
+            Device deviceForSelectedLayer = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
+            if (deviceForSelectedLayer != null) {
+                deviceForSelectedLayer.selectInEditor();
+                host.println("Instrument layer selected: " + instrumentName);
+            } else {
+                host.println("No device found in the selected layer for instrument: " + instrumentName);
+            }
         } else {
             host.println("Error: Instrument layer not found: " + instrumentName);
         }
@@ -250,8 +268,6 @@ public class BitXExtension extends ControllerExtension {
             getHost().println("Invalid BPM value: " + bpmString);
         }
     }
-
-
 
     @Override
     public void exit() {
