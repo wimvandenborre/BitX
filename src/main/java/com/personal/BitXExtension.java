@@ -12,9 +12,9 @@ import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.*;
 
 public class BitXExtension extends ControllerExtension {
-    private static final int MAX_TRACKS = 16;
-    private static final int MAX_SCENES = 128;
-    private static final int MAX_LAYERS = 16;
+    private static  int MAX_TRACKS = 16;
+    private static  int MAX_SCENES = 128;
+    private static  int MAX_LAYERS = 16;
 
     private TrackBank trackBank;
     private Bitmap textWindowBitmap;
@@ -52,24 +52,24 @@ public class BitXExtension extends ControllerExtension {
         widthSetting = prefs.getNumberSetting("Bitmap Width", "Display", 40, 5000, 1, "pixels", 3024);
         heightSetting = prefs.getNumberSetting("Bitmap Height", "Display", 40, 5000, 1, "pixels", 120);
         tracknNumberSetting = prefs.getNumberSetting("Number of tracks", "Display", 1, 128, 1, "tracks", 32);
-        sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 128);
-        layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", MAX_LAYERS);
+        sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 1024);
+        layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 128);
 
         int bitmapWidth = (int) widthSetting.getRaw();
         if (bitmapWidth == 0) bitmapWidth = 3024;
         int bitmapHeight = (int) heightSetting.getRaw();
         if (bitmapHeight == 0) bitmapHeight = 120;
-        int maxTracks = (int) tracknNumberSetting.getRaw();
-        if (maxTracks == 0) maxTracks = 32;
-        int maxScenes = (int) sceneNumberSetting.getRaw();
-        if (maxScenes == 0) maxScenes = 128;
-        int maxLayers = (int) layerNumberSetting.getRaw();
+        MAX_TRACKS = (int) tracknNumberSetting.getRaw();
+        if (MAX_TRACKS == 0) MAX_TRACKS = 32;
+        MAX_SCENES = (int) sceneNumberSetting.getRaw();
+        if (MAX_SCENES == 0) MAX_SCENES = 128;
+        MAX_LAYERS = (int) layerNumberSetting.getRaw();
 
         textWindowBitmap = host.createBitmap(bitmapWidth, bitmapHeight, BitmapFormat.RGB24_32);
-        trackBank = host.createTrackBank(maxTracks, 0, maxScenes, true);
+        trackBank = host.createTrackBank(MAX_TRACKS, 0, MAX_SCENES, true);
 
         // Initialize device and layer structures with dynamic layer count
-        initializeLayersAndDevices(maxLayers);
+        initializeLayersAndDevices(MAX_LAYERS);
 
         commands.put("SMW", (arg, trackIndex) -> displayTextInWindow(host, textWindowBitmap, arg));
         commands.put("LDR", (arg, trackIndex) -> executeLDRCommand(host, drumPresetsPath, arg, deviceBanks[trackIndex]));
@@ -83,8 +83,7 @@ public class BitXExtension extends ControllerExtension {
     private void initializeLayersAndDevices(int maxLayers) {
         for (int i = 0; i < MAX_TRACKS; i++) {
             final int trackIndex = i;
-            trackLayerNames.put(trackIndex, new HashMap<>());
-
+            trackLayerNames.put(trackIndex, new HashMap<>());          
             Track track = trackBank.getItemAt(trackIndex);
             deviceBanks[trackIndex] = track.createDeviceBank(2);
             Device device = deviceBanks[trackIndex].getDevice(1);
