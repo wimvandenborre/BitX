@@ -1,13 +1,13 @@
 package com.personal;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.io.File;
 import java.nio.file.Paths;
-import com.bitwig.extension.api.graphics.Bitmap;
-import com.bitwig.extension.api.graphics.BitmapFormat;
-import com.bitwig.extension.api.graphics.GraphicsOutput;
-import com.bitwig.extension.api.graphics.Renderer;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.bitwig.extension.api.graphics.*;
 import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.*;
 
@@ -72,12 +72,14 @@ public class BitXExtension extends ControllerExtension {
         chainSelectors = new ChainSelector[MAX_TRACKS];
         layerDeviceBanks = new DeviceBank[MAX_TRACKS][MAX_LAYERS];
 
-        textWindowBitmap = host.createBitmap(bitmapWidth, bitmapHeight, BitmapFormat.RGB24_32);
+        textWindowBitmap = host.createBitmap(bitmapWidth, bitmapHeight, BitmapFormat.ARGB32);
+
         trackBank = host.createTrackBank(MAX_TRACKS, 0, MAX_SCENES, true);
 
         // Initialize device and layer structures with dynamic layer count
         initializeLayersAndDevices(MAX_LAYERS);
 
+        // Register available commands.
         commands.put("SMW", (arg, trackIndex) -> displayTextInWindow(host, textWindowBitmap, arg));
         commands.put("LDR", (arg, trackIndex) -> executeLDRCommand(host, drumPresetsPath, arg, deviceBanks[trackIndex]));
         commands.put("BPM", (arg, trackIndex) -> setBpm(arg));
@@ -91,7 +93,7 @@ public class BitXExtension extends ControllerExtension {
     private void initializeLayersAndDevices(int maxLayers) {
         for (int i = 0; i < MAX_TRACKS; i++) {
             final int trackIndex = i;
-            trackLayerNames.put(trackIndex, new HashMap<>());          
+            trackLayerNames.put(trackIndex, new HashMap<>());
             Track track = trackBank.getItemAt(trackIndex);
             deviceBanks[trackIndex] = track.createDeviceBank(2);
             Device device = deviceBanks[trackIndex].getDevice(1);
@@ -127,16 +129,16 @@ public class BitXExtension extends ControllerExtension {
                 clipLauncherSlotBank.addIsPlayingObserver((index, isPlaying) -> {
                     if (index == finalSlotIndex && isPlaying) {
                         String clipName = clipSlot.name().get();
+                        // Check if the clip name starts with the marker "()", which signals commands.
                         if (clipName != null && clipName.startsWith("()")) {
-                            String commandString = clipName.substring(2).trim();
-                            if (!commandString.isEmpty()) {
-                                CommandWithArgument commandWithArgument = parseCommandWithArgument(commandString);
-                                CommandExecutor command = commands.get(commandWithArgument.command);
-
-                                if (command != null) {
-                                    command.execute(commandWithArgument.argument, trackIndex);
+                            // Parse multiple commands from the clip name.
+                            List<CommandWithArgument> commandsToExecute = parseCommands(clipName);
+                            for (CommandWithArgument cmd : commandsToExecute) {
+                                CommandExecutor executor = commands.get(cmd.command);
+                                if (executor != null) {
+                                    executor.execute(cmd.argument, trackIndex);
                                 } else {
-                                    host.println("Unknown command: " + commandWithArgument.command);
+                                    host.println("Unknown command: " + cmd.command);
                                 }
                             }
                         }
@@ -146,30 +148,95 @@ public class BitXExtension extends ControllerExtension {
         }
     }
 
-    private void selectInstrumentInLayer(ControllerHost host, String instrumentName, int trackIndex) {
-        ChainSelector selector = chainSelectors[trackIndex];
-        DeviceLayerBank layerBank = layerBanks[trackIndex];
-
-        if (selector == null || layerBank == null) {
-            host.println("Error: Selector or layer bank not found for track " + trackIndex);
-            return;
-        }
-
-        Integer layerIndex = trackLayerNames.get(trackIndex).get(instrumentName);
-        if (layerIndex != null) {
-            selector.activeChainIndex().set(layerIndex);
-            layerBank.getItemAt(layerIndex).selectInEditor();
-
-            // Select the device in the selected layer
-            Device deviceForSelectedLayer = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
-            if (deviceForSelectedLayer != null) {
-                deviceForSelectedLayer.selectInEditor();
-                host.println("Instrument layer selected: " + instrumentName);
-            } else {
-                host.println("No device found in the selected layer for instrument: " + instrumentName);
+    /**
+     * Splits the clip name (which is assumed to start with "()") into its constituent command parts.
+     * Each command part is separated by the marker "()".
+     */
+    private List<CommandWithArgument> parseCommands(String clipName) {
+        List<CommandWithArgument> commandsList = new ArrayList<>();
+        // Split on the marker "()", note that the first part will be empty if the clip name starts with "()"
+        String[] parts = clipName.split("\\(\\)");
+        for (String part : parts) {
+            String commandSegment = part.trim();
+            if (!commandSegment.isEmpty()) {
+                commandsList.add(parseCommandWithArgument(commandSegment));
             }
-        } else {
-            host.println("Error: Instrument layer not found: " + instrumentName);
+        }
+        return commandsList;
+    }
+
+    /**
+     * Parses a single command with its argument.
+     * It splits on the first space so that, for example, "BPM 120" returns command "BPM" and argument "120".
+     */
+    private CommandWithArgument parseCommandWithArgument(String commandString) {
+        int spaceIndex = commandString.indexOf(" ");
+        String command = (spaceIndex > 0) ? commandString.substring(0, spaceIndex).trim() : commandString;
+        String argument = (spaceIndex > 0) ? commandString.substring(spaceIndex + 1).trim() : "";
+        return new CommandWithArgument(command, argument);
+    }
+
+    private static class CommandWithArgument {
+        final String command;
+        final String argument;
+
+        CommandWithArgument(String command, String argument) {
+            this.command = command;
+            this.argument = argument;
+        }
+    }
+
+    @FunctionalInterface
+    private interface CommandExecutor {
+        void execute(String argument, int trackIndex);
+    }
+
+    private void displayTextInWindow(ControllerHost host, Bitmap myBitmap, String text) {
+        final int width = myBitmap.getWidth();
+        final int height = myBitmap.getHeight();
+        // 1) Render the bitmap's contents
+        myBitmap.render(graphicsOutput -> {
+            graphicsOutput.save();
+            try {
+                graphicsOutput.setOperator(GraphicsOutput.Operator.SOURCE);
+                graphicsOutput.setColor(1.0, 0.0, 0.0, 1.0); // Bright red background
+                graphicsOutput.rectangle(0, 0, width, height);
+                graphicsOutput.fill();
+                graphicsOutput.setFontSize(50.0);
+
+                // Set a color for the text (yellowish)
+                graphicsOutput.setColor(0.9, 1.0, 0.0, 1.0);
+                graphicsOutput.moveTo(10, 60);
+                graphicsOutput.showText(text);
+            } finally {
+                graphicsOutput.restore();
+            }
+        });
+
+        myBitmap.setDisplayWindowTitle("Info");
+        myBitmap.showDisplayWindow();
+    }
+
+    private void setBpm(String bpmString) {
+        try {
+            double targetBpm = Double.parseDouble(bpmString); // Parse the target BPM from the argument
+
+            // Define the actual min and max BPM range in Bitwig
+            double minBpm = 20.0;
+            double maxBpm = 666.0;
+
+            // Ensure target BPM is within the allowed range
+            targetBpm = Math.max(minBpm, Math.min(maxBpm, targetBpm));
+
+            // Map target BPM to the normalized range [0.0, 1.0]
+            double targetNormalizedValue = (targetBpm - minBpm) / (maxBpm - minBpm);
+
+            // Apply the normalized tempo value explicitly to allow both increase and decrease
+            transport.tempo().value().set(targetNormalizedValue);
+
+            getHost().println("BPM set to: " + targetBpm + " (Normalized: " + targetNormalizedValue + ")");
+        } catch (NumberFormatException e) {
+            getHost().println("Invalid BPM value: " + bpmString);
         }
     }
 
@@ -199,80 +266,33 @@ public class BitXExtension extends ControllerExtension {
         host.println("Inserted preset file: " + drumFile);
     }
 
-    private CommandWithArgument parseCommandWithArgument(String commandString) {
-        int spaceIndex = commandString.indexOf(" ");
-        String command = (spaceIndex > 0) ? commandString.substring(0, spaceIndex).trim() : commandString;
-        String argument = (spaceIndex > 0) ? commandString.substring(spaceIndex + 1).trim() : "";
-        return new CommandWithArgument(command, argument);
-    }
+    private void selectInstrumentInLayer(ControllerHost host, String instrumentName, int trackIndex) {
+        ChainSelector selector = chainSelectors[trackIndex];
+        DeviceLayerBank layerBank = layerBanks[trackIndex];
 
-    private static class CommandWithArgument {
-        final String command;
-        final String argument;
-
-        CommandWithArgument(String command, String argument) {
-            this.command = command;
-            this.argument = argument;
+        if (selector == null || layerBank == null) {
+            host.println("Error: Selector or layer bank not found for track " + trackIndex);
+            return;
         }
-    }
-    
 
-    
+        Integer layerIndex = trackLayerNames.get(trackIndex).get(instrumentName);
+        if (layerIndex != null) {
+            selector.activeChainIndex().set(layerIndex);
+            layerBank.getItemAt(layerIndex).selectInEditor();
 
-    @FunctionalInterface
-    private interface CommandExecutor {
-        void execute(String argument, int trackIndex);
-    }
-
-    private void displayTextInWindow(ControllerHost host, Bitmap myBitmap, String text) {
-        int width = myBitmap.getWidth();
-        int height = myBitmap.getHeight();
-
-        myBitmap.render(new Renderer() {
-            @Override
-            public void render(GraphicsOutput graphicsOutput) {
-                graphicsOutput.save();
-                try {
-                    graphicsOutput.setColor(0.0, 0.0, 0.0, 1.0);
-                    graphicsOutput.rectangle(0, 0, width, height);
-                    graphicsOutput.fill();
-
-                    graphicsOutput.setColor(0.9, 1.0, 0.0, 1.0);
-                    graphicsOutput.setFontSize(50);
-                    graphicsOutput.moveTo(10, 40);
-                    graphicsOutput.showText(text);
-                } finally {
-                    graphicsOutput.restore();
-                }
+            // Select the device in the selected layer
+            Device deviceForSelectedLayer = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
+            if (deviceForSelectedLayer != null) {
+                deviceForSelectedLayer.selectInEditor();
+                host.println("Instrument layer selected: " + instrumentName);
+            } else {
+                host.println("No device found in the selected layer for instrument: " + instrumentName);
             }
-        });
-        myBitmap.setDisplayWindowTitle("Info");
-        myBitmap.showDisplayWindow();
-    }
-
-    private void setBpm(String bpmString) {
-        try {
-            double targetBpm = Double.parseDouble(bpmString); // Parse the target BPM from the argument
-
-            // Define the actual min and max BPM range in Bitwig
-            double minBpm = 20.0;
-            double maxBpm = 666.0;
-
-            // Ensure target BPM is within the allowed range
-            targetBpm = Math.max(minBpm, Math.min(maxBpm, targetBpm));
-
-            // Map target BPM to the normalized range [0.0, 1.0]
-            double targetNormalizedValue = (targetBpm - minBpm) / (maxBpm - minBpm);
-
-            // Apply the normalized tempo value explicitly to allow both increase and decrease
-            transport.tempo().value().set(targetNormalizedValue);
-
-            getHost().println("BPM set to: " + targetBpm + " (Normalized: " + targetNormalizedValue + ")");
-        } catch (NumberFormatException e) {
-            getHost().println("Invalid BPM value: " + bpmString);
+        } else {
+            host.println("Error: Instrument layer not found: " + instrumentName);
         }
     }
-    
+
     private void showPopupNotification(ControllerHost host, String text) {
         host.showPopupNotification(text);
     }
