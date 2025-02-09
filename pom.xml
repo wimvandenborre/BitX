@@ -22,7 +22,25 @@
 			<artifactId>extension-api</artifactId>
 			<version>18</version>
 		</dependency>
+		<!-- JavaFX Base Modules -->
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-controls</artifactId>
+			<version>23.0.2</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-graphics</artifactId>
+			<version>23.0.2</version>
+		</dependency>
+		<dependency>
+			<groupId>org.openjfx</groupId>
+			<artifactId>javafx-base</artifactId>
+			<version>23.0.2</version>
+		</dependency>
+
 	</dependencies>
+
 
 	<build>
 		<plugins>
@@ -53,7 +71,7 @@
 						</goals>
 						<configuration>
 							<sourceFile>${project.build.directory}/${project.build.finalName}.jar</sourceFile>
-							<destinationFile>/Users/wimvandenborre/Documents/Bitwig Studio/Extensions/BitX.bwextension</destinationFile>
+							<destinationFile>/Users/borrie/Documents/Bitwig Studio/Extensions/BitX.bwextension</destinationFile>
 						</configuration>
 					</execution>
 				</executions>
