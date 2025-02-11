@@ -20,6 +20,8 @@ public class BitXExtension extends ControllerExtension {
     private String drumPresetsPath;
     private Transport transport;
 
+    private DocumentState documentState;
+
     private DeviceBank[] deviceBanks;
     private DeviceLayerBank[] layerBanks;
     private ChainSelector[] chainSelectors;
@@ -30,24 +32,30 @@ public class BitXExtension extends ControllerExtension {
     private Preferences prefs;
     private SettableRangedValue widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
 
+    private Signal openPatreon;
+    private Signal initWindow;
+
     private Map<String, CommandExecutor> commands = new HashMap<>();
 
     // Map to store track layer names for each track
     private Map<Integer, Map<String, Integer>> trackLayerNames = new HashMap<>();
-
-
 
     private BitXGraphics bitXGraphics;
     // private Process displayProcess;  // Removed: now handled by BitXGraphics
 
     protected BitXExtension(final BitXExtensionDefinition definition, final ControllerHost host) {
         super(definition, host);
+
+
     }
 
     @Override
     public void init() {
 
+
+
         final ControllerHost host = getHost();
+        documentState = host.getDocumentState();
         transport = host.createTransport();
         transport.tempo().value().addValueObserver(value -> {
             host.println("Initial tempo value (normalized): " + value);
@@ -57,11 +65,23 @@ public class BitXExtension extends ControllerExtension {
 
         // Initialize preferences, including the new layer preference
         prefs = host.getPreferences();
-        widthSetting = prefs.getNumberSetting("Bitmap Width", "Display", 40, 5000, 1, "pixels", 3024);
-        heightSetting = prefs.getNumberSetting("Bitmap Height", "Display", 40, 1200, 1, "pixels", 120);
+       widthSetting = prefs.getNumberSetting("Bitmap Width", "Display", 40, 5000, 1, "pixels", 3024);
+       heightSetting = prefs.getNumberSetting("Bitmap Height", "Display", 40, 1200, 1, "pixels", 120);
         tracknNumberSetting = prefs.getNumberSetting("Number of tracks", "Display", 1, 128, 1, "tracks", 32);
         sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 128);
         layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
+
+        openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
+        openPatreon.addSignalObserver(() -> openPatreonPage(host)); // ✅ Properly defined observer
+
+        Signal initWindow = documentState.getSignalSetting(
+                "InitWindow",
+                "Init",
+                "InitWindow"
+        );
+
+        initWindow.addSignalObserver(() -> {
+        });
 
         int bitmapWidth = (int) widthSetting.getRaw();
         if (bitmapWidth == 0) bitmapWidth = 400;
@@ -84,16 +104,33 @@ public class BitXExtension extends ControllerExtension {
         // Initialize BitXGraphics instance for JavaFX communication
         bitXGraphics = new BitXGraphics(host);
 
+        // 🔥 Initialize the master track
+        MasterTrack masterTrack = getHost().createMasterTrack(0); // '0' means no send slots
+
+// 🔥 Ensure volume and VU meter are marked as interested
+        masterTrack.volume().markInterested();
+        masterTrack.color().markInterested(); // If we want to give it a separate color
+
+// 🔥 Add VU meter observer for the master track
+        masterTrack.addVuMeterObserver(128, -1, false, newValue -> {
+           // getHost().println("🎛 Master Track VU Meter: " + newValue);
+            bitXGraphics.sendDataToJavaFX("MASTER_VU:" + newValue);
+        });
+
+        masterTrack.color().addValueObserver((r, g, b) -> {
+            bitXGraphics.sendDataToJavaFX("MASTER_COLOR:" + (int) (r * 255) + ":" + (int) (g * 255) + ":" + (int) (b * 255));
+        });
+
         // 🔥 Mark volume values as "interested"
         for (int i = 0; i < 8; i++) {  // Only the first 8 tracks for faders
             Track track = trackBank.getItemAt(i);
-            track.volume().markInterested();
 
             track.color().markInterested(); // Track color observation
+            track.volume().markInterested();
+            int trackIndex = i;
 
-            int finalJ = i;
             track.color().addValueObserver((r, g, b) -> {
-                bitXGraphics.sendTrackColorData(finalJ, r, g, b);
+                bitXGraphics.sendTrackColorData(trackIndex, r, g, b);
             });
 
             // VU Meter Observer: Use 128 range and the sum of both channels
@@ -258,6 +295,25 @@ public class BitXExtension extends ControllerExtension {
         CommandWithArgument(String command, String argument) {
             this.command = command;
             this.argument = argument;
+        }
+    }
+
+    private void openPatreonPage(final ControllerHost host) {
+        String patreonUrl = "https://per-sonal.com";
+        try {
+            String[] command;
+            if (host.platformIsWindows()) {
+                command = new String[] { "cmd", "/c", "start", patreonUrl };
+            } else if (host.platformIsMac()) {
+                command = new String[] { "open", patreonUrl };
+            } else { // Linux
+                command = new String[] { "xdg-open", patreonUrl };
+            }
+
+            Runtime.getRuntime().exec(command);
+        } catch (Exception e) {
+            host.errorln("Failed to open Patreon page: " + e.getMessage());
+            host.showPopupNotification("Please visit " + patreonUrl + " in your browser.");
         }
     }
 

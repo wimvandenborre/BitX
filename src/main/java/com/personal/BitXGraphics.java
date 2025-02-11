@@ -70,7 +70,8 @@ public class BitXGraphics {
                         "--module-path", "/opt/javafx/lib",
                         "--add-modules", "javafx.controls,javafx.graphics",
                         "-jar",
-                        "/Users/borrie/Documents/Programming/BitXDisplayApp/target/BitXDisplayApp-1.0-SNAPSHOT.jar"
+                        System.getProperty("user.home") + "/Documents/Bitwig Studio/Extensions/PerSonal/BitXDisplayApp.jar"
+
                 ).inheritIO();
 
                 pb.redirectErrorStream(true);
@@ -88,7 +89,13 @@ public class BitXGraphics {
                     }
                 }).start();
 
-                Thread.sleep(500); // Give the process some time to stabilize
+
+                Thread.sleep(1000); // 🔄 Give JavaFX time to load
+
+                // 🔥 **Resend Actual Track Colors** After JavaFX Has Started
+                host.println("🎨 Resending track colors to JavaFX...");
+
+
 
             } catch (Exception e) {
                 host.println("Error starting JavaFX app: " + e.getMessage());

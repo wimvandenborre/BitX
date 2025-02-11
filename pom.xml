@@ -71,7 +71,7 @@
 						</goals>
 						<configuration>
 							<sourceFile>${project.build.directory}/${project.build.finalName}.jar</sourceFile>
-							<destinationFile>/Users/borrie/Documents/Bitwig Studio/Extensions/BitX.bwextension</destinationFile>
+							<destinationFile>/Users/borrie/Documents/Bitwig Studio/Extensions/PerSonal/BitX.bwextension</destinationFile>
 						</configuration>
 					</execution>
 				</executions>
