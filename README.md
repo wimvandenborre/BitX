@@ -26,6 +26,7 @@ Available commands at this time:
 ()LDR "presetname" -> Load Drum Rack -> Replaces your existing drum rack in second position, the drum rack presets need to be in your /Library/Presets/Drum Machine folder
 
 ()LIR "presetname" -> Load Instrument Rack -> will select the preset in an instrument rack. This is a Bitwig preset you save from any plugin you want to use.
+()LIR "presetname:5" -> the second parameter will select the remotes controls page of your selected device.
 
 ()SPN "Message" -> Show a popup Message that dissapears after a few seconds
 
