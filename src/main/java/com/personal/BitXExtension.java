@@ -25,6 +25,8 @@ public class BitXExtension extends ControllerExtension {
     private ChainSelector[] chainSelectors;
     private DeviceBank[][] layerDeviceBanks;
 
+    private CursorRemoteControlsPage cursorRemoteControlsPage;
+
     private Preferences prefs;
     private SettableRangedValue widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
 
@@ -32,6 +34,8 @@ public class BitXExtension extends ControllerExtension {
 
     // Map to store track layer names for each track
     private Map<Integer, Map<String, Integer>> trackLayerNames = new HashMap<>();
+
+
 
     private BitXGraphics bitXGraphics;
     // private Process displayProcess;  // Removed: now handled by BitXGraphics
@@ -99,6 +103,42 @@ public class BitXExtension extends ControllerExtension {
             });
 
         }
+
+        // Get the cursor track (follows selected track)
+        CursorTrack cursorTrack = host.createCursorTrack("MyTrack", "Selected Track", 0, 0, true);
+
+        // Get the cursor device (follows selected device on track)
+        PinnableCursorDevice cursorDevice = cursorTrack.createCursorDevice("MyDevice", "Selected Device", 0, CursorDeviceFollowMode.FOLLOW_SELECTION);
+
+        // Create a RemoteControlsPage for the selected device
+        cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
+
+        if (cursorRemoteControlsPage != null) {
+            // Send Page Name
+            cursorRemoteControlsPage.getName().addValueObserver(name -> {
+                host.println("RemoteControlsPage Name: " + name);
+                bitXGraphics.sendDataToJavaFX("PAGE:" + name);
+            });
+
+            // Observe first 8 knobs
+            for (int i = 0; i < 8; i++) {
+                int index = i;
+                Parameter knob = cursorRemoteControlsPage.getParameter(i);
+
+                // Send knob names
+                knob.name().addValueObserver(name -> {
+                    host.println("Knob " + index + " name: " + name);
+                    bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + index + ":" + name);
+                });
+
+                // Send knob values
+                knob.value().addValueObserver(value -> {
+                    host.println("Knob " + index + " value: " + value);
+                    bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + index + ":" + value);
+                });
+            }
+        }
+
 
         initializeLayersAndDevices(MAX_LAYERS);
 

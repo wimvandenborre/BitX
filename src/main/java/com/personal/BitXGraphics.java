@@ -1,12 +1,16 @@
 package com.personal;
 
 import com.bitwig.extension.controller.api.*;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 
 public class BitXGraphics {
     private final ControllerHost host;
+    private Process displayProcess;
 
     public BitXGraphics(ControllerHost host) {
         this.host = host;
@@ -52,19 +56,44 @@ public class BitXGraphics {
         }
     }
 
-    public Process startDisplayProcess() {
-        Process displayProcess = null;
-        try {
-            displayProcess = new ProcessBuilder(
-                    "java",
-                    "--module-path", "/opt/javafx/lib",
-                    "--add-modules", "javafx.controls,javafx.graphics",
-                    "-jar",
-                    "/Users/borrie/Documents/Programming/BitXDisplayApp/target/BitXDisplayApp-1.0-SNAPSHOT.jar"
-            ).start();
-        } catch (Exception e) {
-            host.println("Error starting JavaFX app: " + e.getMessage());
+  // Store as class variable
+
+    void startDisplayProcess() {
+        if (displayProcess != null && displayProcess.isAlive()) {
+            return; // Already running
         }
-        return displayProcess;
+
+        new Thread(() -> {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(
+                        "java",
+                        "--module-path", "/opt/javafx/lib",
+                        "--add-modules", "javafx.controls,javafx.graphics",
+                        "-jar",
+                        "/Users/borrie/Documents/Programming/BitXDisplayApp/target/BitXDisplayApp-1.0-SNAPSHOT.jar"
+                ).inheritIO();
+
+                pb.redirectErrorStream(true);
+                displayProcess = pb.start();
+
+                // Consume output in a background thread
+                new Thread(() -> {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(displayProcess.getInputStream()))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            host.println("JavaFX: " + line);
+                        }
+                    } catch (Exception e) {
+                        host.println("Error reading JavaFX output: " + e.getMessage());
+                    }
+                }).start();
+
+                Thread.sleep(500); // Give the process some time to stabilize
+
+            } catch (Exception e) {
+                host.println("Error starting JavaFX app: " + e.getMessage());
+            }
+        }).start();
     }
+
 }
