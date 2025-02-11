@@ -95,8 +95,6 @@ public class BitXGraphics {
                 // 🔥 **Resend Actual Track Colors** After JavaFX Has Started
                 host.println("🎨 Resending track colors to JavaFX...");
 
-
-
             } catch (Exception e) {
                 host.println("Error starting JavaFX app: " + e.getMessage());
             }

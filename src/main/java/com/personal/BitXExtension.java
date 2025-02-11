@@ -29,6 +29,8 @@ public class BitXExtension extends ControllerExtension {
 
     private CursorRemoteControlsPage cursorRemoteControlsPage;
 
+    private CursorRemoteControlsPage[][] cursorRemoteControlsPages;
+
     private Preferences prefs;
     private SettableRangedValue widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
 
@@ -150,6 +152,8 @@ public class BitXExtension extends ControllerExtension {
         // Create a RemoteControlsPage for the selected device
         cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
 
+        cursorRemoteControlsPages = new CursorRemoteControlsPage[MAX_TRACKS][MAX_LAYERS];
+
         if (cursorRemoteControlsPage != null) {
             // Send Page Name
             cursorRemoteControlsPage.getName().addValueObserver(name -> {
@@ -188,7 +192,8 @@ public class BitXExtension extends ControllerExtension {
                 layerBanks,
                 chainSelectors,
                 layerDeviceBanks,
-                trackLayerNames
+                trackLayerNames,
+                cursorRemoteControlsPages
         );
         commands.put("SMW", (arg, trackIndex) -> bitXFunctions.displayTextInWindow(arg));
         commands.put("LDR", (arg, trackIndex) -> bitXFunctions.executeLDRCommand(arg, trackIndex));
@@ -207,6 +212,9 @@ public class BitXExtension extends ControllerExtension {
         host.showPopupNotification("BitX Initialized");
     }
 
+    // Add an array to store CursorRemoteControlsPage instances
+
+
     private void initializeLayersAndDevices(int maxLayers) {
         for (int i = 0; i < MAX_TRACKS; i++) {
             final int trackIndex = i;
@@ -224,9 +232,21 @@ public class BitXExtension extends ControllerExtension {
                 layer.name().addValueObserver(layerName -> {
                     trackLayerNames.get(trackIndex).put(layerName, layerIndex);
                 });
+
+                // ✅ Ensure the array is initialized before using it
+                if (cursorRemoteControlsPages != null) {
+                    Device layerDevice = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
+                    if (layerDevice != null) {
+                        cursorRemoteControlsPages[trackIndex][layerIndex] = layerDevice.createCursorRemoteControlsPage(8);
+                        cursorRemoteControlsPages[trackIndex][layerIndex].pageCount().markInterested(); // ✅ Pre-mark interest
+                    }
+                }
             }
         }
     }
+
+
+
 
     private void initializeTrackAndClipObservers(final ControllerHost host) {
         for (int i = 0; i < MAX_TRACKS; i++) {

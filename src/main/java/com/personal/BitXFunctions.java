@@ -22,6 +22,7 @@ public class BitXFunctions {
     private final ChainSelector[] chainSelectors;
     private final DeviceBank[][] layerDeviceBanks;
     private final java.util.Map<Integer, java.util.Map<String, Integer>> trackLayerNames;
+    private final CursorRemoteControlsPage[][] cursorRemoteControlsPages;
 
     public BitXFunctions(ControllerHost host,
                          Transport transport,
@@ -30,7 +31,8 @@ public class BitXFunctions {
                          DeviceLayerBank[] layerBanks,
                          ChainSelector[] chainSelectors,
                          DeviceBank[][] layerDeviceBanks,
-                         java.util.Map<Integer, java.util.Map<String, Integer>> trackLayerNames) {
+                         java.util.Map<Integer, java.util.Map<String, Integer>> trackLayerNames,
+                         CursorRemoteControlsPage[][] cursorRemoteControlsPages) {
         this.host = host;
         this.transport = transport;
         this.drumPresetsPath = drumPresetsPath;
@@ -39,6 +41,7 @@ public class BitXFunctions {
         this.chainSelectors = chainSelectors;
         this.layerDeviceBanks = layerDeviceBanks;
         this.trackLayerNames = trackLayerNames;
+        this.cursorRemoteControlsPages = cursorRemoteControlsPages;
     }
 
     public void displayTextInWindow(String text) {
@@ -124,7 +127,13 @@ public class BitXFunctions {
         host.println("Inserted preset file: " + drumFile);
     }
 
-    public void selectInstrumentInLayer(String instrumentName, int trackIndex) {
+    public void selectInstrumentInLayer(String commandArgs, int trackIndex) {
+        String[] parts = commandArgs.split(":");
+        String instrumentName = parts[0].trim();
+
+        // ✅ Validate and adjust the page number (User inputs 1-based, so we subtract 1)
+        int remotePageIndex = (parts.length > 1) ? validatePageNumber(parts[1].trim()) - 1 : -1;
+
         ChainSelector selector = chainSelectors[trackIndex];
         DeviceLayerBank layerBank = layerBanks[trackIndex];
 
@@ -142,12 +151,26 @@ public class BitXFunctions {
             Device deviceForSelectedLayer = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
             if (deviceForSelectedLayer != null) {
                 deviceForSelectedLayer.selectInEditor();
-                host.println("Instrument layer selected: " + instrumentName);
+                host.println("✅ Instrument layer selected: " + instrumentName);
+
+                // ✅ Use pre-initialized CursorRemoteControlsPage
+                CursorRemoteControlsPage cursorPage = cursorRemoteControlsPages[trackIndex][layerIndex];
+
+                if (cursorPage != null && remotePageIndex >= 0) {
+                    int totalPages = cursorPage.pageCount().get(); // ✅ Safe to access
+
+                    if (remotePageIndex < totalPages) {
+                        cursorPage.selectedPageIndex().set(remotePageIndex);
+                        host.println("✅ Remote Controls Page selected: " + (remotePageIndex + 1)); // Show 1-based page number
+                    } else {
+                        host.println("⚠️ Error: Remote Controls Page " + (remotePageIndex + 1) + " does not exist.");
+                    }
+                }
             } else {
-                host.println("No device found in the selected layer for instrument: " + instrumentName);
+                host.println("⚠️ No device found in the selected layer for instrument: " + instrumentName);
             }
         } else {
-            host.println("Error: Instrument layer not found: " + instrumentName);
+            host.println("⚠️ Error: Instrument layer not found: " + instrumentName);
         }
     }
 
@@ -165,4 +188,16 @@ public class BitXFunctions {
             host.println("❌ Error sending data to JavaFX: " + e.getMessage());
         }
     }
+
+    private int validatePageNumber(String input) {
+        try {
+            int pageNumber = Integer.parseInt(input.trim());
+            return Math.max(pageNumber, 1); // Ensure it's at least 1
+        } catch (NumberFormatException e) {
+            host.println("⚠️ Invalid page number input: " + input + ". Defaulting to page 1.");
+            return 1; // Default to first page
+        }
+    }
+
+
 }
