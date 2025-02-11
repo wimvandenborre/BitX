@@ -12,8 +12,10 @@ This will change the drumrack for that track
 
 4) On an instrument track put an instrument selector on the second position (put an fx selector for example before it)
   addd some presets that you create from plugins in the selector. Then in a clipname on that track use ()LIR nameofpreset -> This will load the requested preset.
+  You can also add a second argument pagenumber, this will select the remotes controls page of the device you loaded. use ":" as seperator. -> for example:
+  ()LIR nameofpreset:5
 
-5) Multiple commands per line are now possible: ()BPM 120 ()SMW Hello World ()SPN Notification Message
+6) Multiple commands per line are now possible: ()BPM 120 ()SMW Hello World ()SPN Notification Message
   
 Available commands at this time:
 
