@@ -1,6 +1,6 @@
 This is the beginning of a Clyphx system for Bitwig
 
-If you don't want to compile and try it out just download the extension from the ${bitwig.extension.directory} directory
+If you don't want to compile and try it out just download the extension from the ${bitwig.extension.directory} directory. Unzip the whole folder into Bitwig Studio/Extensions
 
 1) The displaywindow is being rebuild and in an experimental fase. Will be updated soon
 
