@@ -31,11 +31,21 @@ public class BitXExtension extends ControllerExtension {
 
     private CursorRemoteControlsPage[][] cursorRemoteControlsPages;
 
+    private Clip cursorClipArranger;
+    private Clip cursorClipLauncher;
+
+    // We store the "Clip Type" setting during initialization.
+    private SettableEnumValue clipTypeSetting;
+
+    // Global map for storing note data.
+    // Outer key: x-coordinate (step); inner map: key (y) → note status.
+    private final Map<Integer, Map<Integer, Integer>> currentNotesInClip = new HashMap<>();
+
     private Preferences prefs;
     private SettableRangedValue widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
 
-    private Signal openPatreon;
-    private Signal initWindow;
+    private Signal button_openPatreon;
+    private Signal button_groovy;
 
     private Map<String, CommandExecutor> commands = new HashMap<>();
 
@@ -73,16 +83,17 @@ public class BitXExtension extends ControllerExtension {
         sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 128);
         layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
 
-        openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
-        openPatreon.addSignalObserver(() -> openPatreonPage(host)); // ✅ Properly defined observer
+        button_openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
+        button_openPatreon.addSignalObserver(() -> openPatreonPage(host)); // ✅ Properly defined observer
 
-        Signal initWindow = documentState.getSignalSetting(
-                "InitWindow",
-                "Init",
-                "InitWindow"
+        Signal button_groovy = documentState.getSignalSetting(
+                "Groovy",
+                "NoteManipulation",
+                "grooveNotes"
         );
 
-        initWindow.addSignalObserver(() -> {
+        button_groovy.addSignalObserver(() -> {
+            shiftNotesLeft(getCursorClip());
         });
 
         int bitmapWidth = (int) widthSetting.getRaw();
@@ -180,7 +191,26 @@ public class BitXExtension extends ControllerExtension {
             }
         }
 
+        // Create the two cursor clips.
+        cursorClipArranger = host.createArrangerCursorClip(16 * 8, 128);
+        cursorClipLauncher = host.createLauncherCursorClip(16 * 8, 128);
+        host.println("Arranger and Launcher cursor clips created.");
 
+        cursorClipArranger.setStepSize(1.0 / 16.0);
+        cursorClipLauncher.setStepSize(1.0 / 16.0);
+
+        // Attach a step data observer to both clips.
+        // This observer mimics the JavaScript "observingNotes" function.
+        cursorClipArranger.addStepDataObserver(this::observingNotes);
+        cursorClipLauncher.addStepDataObserver(this::observingNotes);
+
+        // Make sure the key range is visible.
+        cursorClipArranger.scrollToKey(0);
+        cursorClipLauncher.scrollToKey(0);
+
+        // Request the "Clip Type" setting once during init and store it.
+        clipTypeSetting = documentState.getEnumSetting("Clip Type", "Note Manipulation", new String[] { "Launcher", "Arranger" }, "Arranger");
+        
         initializeLayersAndDevices(MAX_LAYERS);
 
         // The command functions have been moved to the CommandFunctions class.
@@ -212,7 +242,63 @@ public class BitXExtension extends ControllerExtension {
         host.showPopupNotification("BitX Initialized");
     }
 
-    // Add an array to store CursorRemoteControlsPage instances
+    private void observingNotes(int x, int y, int stat) {
+        ControllerHost host = getHost();
+        host.println("Observing note: x=" + x + ", y=" + y + ", stat=" + stat);
+        // Get or create the inner map for step x.
+        Map<Integer, Integer> stepNotes = currentNotesInClip.get(x);
+        if (stepNotes == null) {
+            stepNotes = new HashMap<>();
+            currentNotesInClip.put(x, stepNotes);
+        }
+        if (stat == 0) {
+            stepNotes.remove(y);
+            host.println("Removed note at x=" + x + ", y=" + y);
+        } else {
+            stepNotes.put(y, stat);
+            host.println("Stored note at x=" + x + ", y=" + y + ", stat=" + stat);
+        }
+    }
+
+    /**
+     * Returns the active clip based on the stored "Clip Type" setting.
+     * This mimics the JavaScript getCursorClip() function.
+     */
+    private Clip getCursorClip() {
+        // Use the stored clipTypeSetting rather than requesting a new setting.
+        String type = clipTypeSetting.get();
+        getHost().println("getCursorClip: Clip Type is " + type);
+        if ("Arranger".equals(type)) {
+            return cursorClipArranger;
+        } else {
+            return cursorClipLauncher;
+        }
+    }
+
+    /**
+     * Shifts every note in the global note map one grid step to the left.
+     * (Assumes one grid step equals one 64th note.)
+     *
+     * @param clip The currently active clip.
+     */
+    private void shiftNotesLeft(Clip clip) {
+        ControllerHost host = getHost();
+        host.println("shiftNotesLeft: Starting note shift.");
+        int movedCount = 0;
+        for (Integer x : new ArrayList<>(currentNotesInClip.keySet())) {
+            if (x > 0) { // do not shift notes at the leftmost position
+                Map<Integer, Integer> stepNotes = currentNotesInClip.get(x);
+                if (stepNotes != null) {
+                    for (Integer y : new ArrayList<>(stepNotes.keySet())) {
+                        host.println("Moving note from step " + x + ", key " + y + " to step " + (x - 1));
+                        clip.moveStep(x, y, -1, 0);
+                        movedCount++;
+                    }
+                }
+            }
+        }
+        host.println("shiftNotesLeft: Completed. Moved " + movedCount + " note(s).");
+    }
 
 
     private void initializeLayersAndDevices(int maxLayers) {
