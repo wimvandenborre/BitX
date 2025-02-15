@@ -117,14 +117,14 @@ public class BitXExtension extends ControllerExtension {
         // Initialize BitXGraphics instance for JavaFX communication
         bitXGraphics = new BitXGraphics(host);
 
-        // 🔥 Initialize the master track
+        //Initialize the master track
         MasterTrack masterTrack = getHost().createMasterTrack(0); // '0' means no send slots
 
-// 🔥 Ensure volume and VU meter are marked as interested
+        // Ensure volume and VU meter are marked as interested
         masterTrack.volume().markInterested();
         masterTrack.color().markInterested(); // If we want to give it a separate color
 
-// 🔥 Add VU meter observer for the master track
+    //  Add VU meter observer for the master track
         masterTrack.addVuMeterObserver(128, -1, false, newValue -> {
            // getHost().println("🎛 Master Track VU Meter: " + newValue);
             bitXGraphics.sendDataToJavaFX("MASTER_VU:" + newValue);
@@ -134,7 +134,7 @@ public class BitXExtension extends ControllerExtension {
             bitXGraphics.sendDataToJavaFX("MASTER_COLOR:" + (int) (r * 255) + ":" + (int) (g * 255) + ":" + (int) (b * 255));
         });
 
-        // 🔥 Mark volume values as "interested"
+        //  Mark volume values as "interested"
         for (int i = 0; i < 8; i++) {  // Only the first 8 tracks for faders
             Track track = trackBank.getItemAt(i);
 
@@ -277,8 +277,6 @@ public class BitXExtension extends ControllerExtension {
 
     /**
      * Shifts every note in the global note map one grid step to the left.
-     * (Assumes one grid step equals one 64th note.)
-     *
      * @param clip The currently active clip.
      */
     private void shiftNotesLeft(Clip clip) {
@@ -319,7 +317,7 @@ public class BitXExtension extends ControllerExtension {
                     trackLayerNames.get(trackIndex).put(layerName, layerIndex);
                 });
 
-                // ✅ Ensure the array is initialized before using it
+                // Ensure the array is initialized before using it
                 if (cursorRemoteControlsPages != null) {
                     Device layerDevice = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
                     if (layerDevice != null) {
@@ -330,8 +328,6 @@ public class BitXExtension extends ControllerExtension {
             }
         }
     }
-
-
 
 
     private void initializeTrackAndClipObservers(final ControllerHost host) {
