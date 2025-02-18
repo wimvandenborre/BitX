@@ -1,10 +1,7 @@
 package com.personal;
 
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.*;
@@ -26,6 +23,9 @@ public class BitXExtension extends ControllerExtension {
     private DeviceLayerBank[] layerBanks;
     private ChainSelector[] chainSelectors;
     private DeviceBank[][] layerDeviceBanks;
+
+    private DeviceBank[] channelFilterDeviceBanks;
+    private DeviceBank[] noteFilterDeviceBanks;
 
     private CursorRemoteControlsPage cursorRemoteControlsPage;
 
@@ -55,6 +55,23 @@ public class BitXExtension extends ControllerExtension {
     private BitXGraphics bitXGraphics;
     // private Process displayProcess;  // Removed: now handled by BitXGraphics
 
+
+    //ChannelFilter
+    private final UUID channelFilterUUID = UUID.fromString("c5a1bb2d-a589-4fda-b3cf-911cfd6297be");
+    private final Map<Integer, Device> channelFilterDevices = new HashMap<>();
+    private final Map<Integer, SpecificBitwigDevice> specificChannelFilterDevices = new HashMap<>();
+    private DeviceMatcher channelFilterDeviceMatcher;
+    private final Map<Integer, List<Parameter>> trackChannelFilterParameters = new HashMap<>();
+
+    //ChannelFilter
+    private final UUID noteFilterUUID = UUID.fromString("ef7559c8-49ae-4657-95be-11abb896c969");
+    private final Map<Integer, Device> noteFilterDevices = new HashMap<>();
+    private final Map<Integer, SpecificBitwigDevice> specificNoteFilterDevices = new HashMap<>();
+    private DeviceMatcher noteFilterDeviceMatcher;
+    private final Map<Integer, List<Parameter>> trackNoteFilterParameters = new HashMap<>();
+
+
+
     protected BitXExtension(final BitXExtensionDefinition definition, final ControllerHost host) {
         super(definition, host);
 
@@ -67,10 +84,11 @@ public class BitXExtension extends ControllerExtension {
 
 
         final ControllerHost host = getHost();
+
         documentState = host.getDocumentState();
         transport = host.createTransport();
         transport.tempo().value().addValueObserver(value -> {
-            host.println("Initial tempo value (normalized): " + value);
+         //   host.println("Initial tempo value (normalized): " + value);
         });
 
         drumPresetsPath = Paths.get(System.getProperty("user.home"), "Documents", "Bitwig Studio", "Library", "Presets", "Drum Machine").toString();
@@ -93,7 +111,7 @@ public class BitXExtension extends ControllerExtension {
         );
 
         button_groovy.addSignalObserver(() -> {
-            shiftNotesLeft(getCursorClip());
+            shiftNotesLeft(cursorClipLauncher);
         });
 
         int bitmapWidth = (int) widthSetting.getRaw();
@@ -108,6 +126,8 @@ public class BitXExtension extends ControllerExtension {
 
         // Initialize dynamic arrays based on preferences
         deviceBanks = new DeviceBank[MAX_TRACKS];
+        channelFilterDeviceBanks = new DeviceBank[MAX_TRACKS];
+        noteFilterDeviceBanks = new DeviceBank[MAX_TRACKS];
         layerBanks = new DeviceLayerBank[MAX_TRACKS];
         chainSelectors = new ChainSelector[MAX_TRACKS];
         layerDeviceBanks = new DeviceBank[MAX_TRACKS][MAX_LAYERS];
@@ -134,6 +154,51 @@ public class BitXExtension extends ControllerExtension {
             bitXGraphics.sendDataToJavaFX("MASTER_COLOR:" + (int) (r * 255) + ":" + (int) (g * 255) + ":" + (int) (b * 255));
         });
 
+        channelFilterDevices.clear();
+        specificChannelFilterDevices.clear();
+        trackChannelFilterParameters.clear();
+
+        for (int i = 0; i < MAX_TRACKS; i++) {
+            Track track = trackBank.getItemAt(i);
+
+            //ChannelFilter
+            DeviceBank channelFilterDeviceBank = track.createDeviceBank(16);
+            channelFilterDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(channelFilterUUID));
+            Device device = channelFilterDeviceBank.getDevice(0); // The first matched device
+            SpecificBitwigDevice specificChannelFilterDevice = device.createSpecificBitwigDevice(channelFilterUUID);
+            specificChannelFilterDevices.put(i, specificChannelFilterDevice);
+            //Create premade parameter
+            List<Parameter> channelFilterparams = new ArrayList<>();
+            for (int j = 1; j <= 16; j++) {
+                Parameter noteChannelParam = specificChannelFilterDevice.createParameter("SELECT_CHANNEL_" + j);
+                noteChannelParam.name().markInterested();
+                noteChannelParam.value().markInterested();
+                channelFilterparams.add(noteChannelParam);
+            }
+            trackChannelFilterParameters.put(i, channelFilterparams);
+
+            //noteFilter
+            DeviceBank noteFilterDeviceBank = track.createDeviceBank(16);
+            noteFilterDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(noteFilterUUID));
+            Device noteFilterdevice = noteFilterDeviceBank.getDevice(0); // The first matched device
+            SpecificBitwigDevice specificNoteFilterDevice = noteFilterdevice.createSpecificBitwigDevice(noteFilterUUID);
+            specificNoteFilterDevices.put(i, specificChannelFilterDevice);
+
+            Parameter noteFilterParamMIN_KEY = specificNoteFilterDevice.createParameter("MIN_KEY");
+            Parameter noteFilterParamMAX_KEY = specificNoteFilterDevice.createParameter("MAX_KEY");
+
+            noteFilterParamMIN_KEY.name().markInterested();
+            noteFilterParamMIN_KEY.value().markInterested();
+            noteFilterParamMAX_KEY.name().markInterested();
+            noteFilterParamMAX_KEY.value().markInterested();
+
+            List<Parameter> noteFilterParams = new ArrayList<>();
+            noteFilterParams.add(noteFilterParamMIN_KEY);
+            noteFilterParams.add(noteFilterParamMAX_KEY);
+            trackNoteFilterParameters.put(i, noteFilterParams);
+
+        }
+
         //  Mark volume values as "interested"
         for (int i = 0; i < 8; i++) {  // Only the first 8 tracks for faders
             Track track = trackBank.getItemAt(i);
@@ -154,21 +219,10 @@ public class BitXExtension extends ControllerExtension {
 
         }
 
-        // Get the cursor track (follows selected track)
-        CursorTrack cursorTrack = host.createCursorTrack("MyTrack", "Selected Track", 0, 0, true);
-
-        // Get the cursor device (follows selected device on track)
-        PinnableCursorDevice cursorDevice = cursorTrack.createCursorDevice("MyDevice", "Selected Device", 0, CursorDeviceFollowMode.FOLLOW_SELECTION);
-
-        // Create a RemoteControlsPage for the selected device
-        cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
-
         cursorRemoteControlsPages = new CursorRemoteControlsPage[MAX_TRACKS][MAX_LAYERS];
 
         if (cursorRemoteControlsPage != null) {
-            // Send Page Name
             cursorRemoteControlsPage.getName().addValueObserver(name -> {
-                host.println("RemoteControlsPage Name: " + name);
                 bitXGraphics.sendDataToJavaFX("PAGE:" + name);
             });
 
@@ -176,16 +230,11 @@ public class BitXExtension extends ControllerExtension {
             for (int i = 0; i < 8; i++) {
                 int index = i;
                 Parameter knob = cursorRemoteControlsPage.getParameter(i);
-
-                // Send knob names
                 knob.name().addValueObserver(name -> {
-                    host.println("Knob " + index + " name: " + name);
                     bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + index + ":" + name);
                 });
 
-                // Send knob values
                 knob.value().addValueObserver(value -> {
-                    host.println("Knob " + index + " value: " + value);
                     bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + index + ":" + value);
                 });
             }
@@ -194,13 +243,11 @@ public class BitXExtension extends ControllerExtension {
         // Create the two cursor clips.
         cursorClipArranger = host.createArrangerCursorClip(16 * 8, 128);
         cursorClipLauncher = host.createLauncherCursorClip(16 * 8, 128);
-        host.println("Arranger and Launcher cursor clips created.");
 
         cursorClipArranger.setStepSize(1.0 / 16.0);
-        cursorClipLauncher.setStepSize(1.0 / 16.0);
+        cursorClipLauncher.setStepSize(1.0 / 32.0);
 
         // Attach a step data observer to both clips.
-        // This observer mimics the JavaScript "observingNotes" function.
         cursorClipArranger.addStepDataObserver(this::observingNotes);
         cursorClipLauncher.addStepDataObserver(this::observingNotes);
 
@@ -219,33 +266,38 @@ public class BitXExtension extends ControllerExtension {
                 transport,
                 drumPresetsPath,
                 deviceBanks,
+                channelFilterDeviceBanks,
                 layerBanks,
                 chainSelectors,
                 layerDeviceBanks,
                 trackLayerNames,
-                cursorRemoteControlsPages
+                cursorRemoteControlsPages,
+                trackChannelFilterParameters,
+                trackNoteFilterParameters
         );
         commands.put("SMW", (arg, trackIndex) -> bitXFunctions.displayTextInWindow(arg));
         commands.put("LDR", (arg, trackIndex) -> bitXFunctions.executeLDRCommand(arg, trackIndex));
         commands.put("BPM", (arg, trackIndex) -> bitXFunctions.setBpm(arg));
         commands.put("LIR", (arg, trackIndex) -> bitXFunctions.selectInstrumentInLayer(arg, trackIndex));
         commands.put("SPN", (arg, trackIndex) -> bitXFunctions.showPopupNotification(arg));
+        commands.put("CNF", (arg, trackIndex) -> bitXFunctions.changeNoteFilter(arg, trackIndex));
+
+
 
         initializeTrackAndClipObservers(host);
 
         try {
             bitXGraphics.startDisplayProcess();
         } catch (Exception e) {
-            host.println("Error starting JavaFX app: " + e.getMessage());
+
         }
 
         host.showPopupNotification("BitX Initialized");
     }
 
     private void observingNotes(int x, int y, int stat) {
-        ControllerHost host = getHost();
-        host.println("Observing note: x=" + x + ", y=" + y + ", stat=" + stat);
-        // Get or create the inner map for step x.
+
+       // ControllerHost host = getHost();
         Map<Integer, Integer> stepNotes = currentNotesInClip.get(x);
         if (stepNotes == null) {
             stepNotes = new HashMap<>();
@@ -253,10 +305,8 @@ public class BitXExtension extends ControllerExtension {
         }
         if (stat == 0) {
             stepNotes.remove(y);
-            host.println("Removed note at x=" + x + ", y=" + y);
         } else {
             stepNotes.put(y, stat);
-            host.println("Stored note at x=" + x + ", y=" + y + ", stat=" + stat);
         }
     }
 
@@ -267,7 +317,7 @@ public class BitXExtension extends ControllerExtension {
     private Clip getCursorClip() {
         // Use the stored clipTypeSetting rather than requesting a new setting.
         String type = clipTypeSetting.get();
-        getHost().println("getCursorClip: Clip Type is " + type);
+       // getHost().println("getCursorClip: Clip Type is " + type);
         if ("Arranger".equals(type)) {
             return cursorClipArranger;
         } else {
@@ -281,21 +331,20 @@ public class BitXExtension extends ControllerExtension {
      */
     private void shiftNotesLeft(Clip clip) {
         ControllerHost host = getHost();
-        host.println("shiftNotesLeft: Starting note shift.");
         int movedCount = 0;
         for (Integer x : new ArrayList<>(currentNotesInClip.keySet())) {
             if (x > 0) { // do not shift notes at the leftmost position
                 Map<Integer, Integer> stepNotes = currentNotesInClip.get(x);
                 if (stepNotes != null) {
                     for (Integer y : new ArrayList<>(stepNotes.keySet())) {
-                        host.println("Moving note from step " + x + ", key " + y + " to step " + (x - 1));
+                       // host.println("Moving note from step " + x + ", key " + y + " to step " + (x - 1));
                         clip.moveStep(x, y, -1, 0);
                         movedCount++;
                     }
                 }
             }
         }
-        host.println("shiftNotesLeft: Completed. Moved " + movedCount + " note(s).");
+      //  host.println("shiftNotesLeft: Completed. Moved " + movedCount + " note(s).");
     }
 
 
@@ -304,25 +353,70 @@ public class BitXExtension extends ControllerExtension {
             final int trackIndex = i;
             trackLayerNames.put(trackIndex, new HashMap<>());
             Track track = trackBank.getItemAt(trackIndex);
-            deviceBanks[trackIndex] = track.createDeviceBank(2);
-            Device device = deviceBanks[trackIndex].getDevice(1);
-            layerBanks[trackIndex] = device.createLayerBank(maxLayers);
-            chainSelectors[trackIndex] = device.createChainSelector();
+
+            //channelFilter
+            if (channelFilterDeviceBanks[trackIndex] == null) {
+                channelFilterDeviceBanks[trackIndex] = track.createDeviceBank(16);
+            }
+            channelFilterDeviceBanks[trackIndex].setDeviceMatcher(channelFilterDeviceMatcher);
+
+            for (int j = 0; j < channelFilterDeviceBanks[trackIndex].getSizeOfBank(); j++) {
+                Device device = channelFilterDeviceBanks[trackIndex].getDevice(j);
+                if (device == null) continue;
+
+                device.exists().addValueObserver(exists -> {
+                    if (exists) {
+                        channelFilterDevices.put(trackIndex, device);
+                    }
+                });
+            }
+
+
+            //noteFilter
+            if (noteFilterDeviceBanks[trackIndex] == null) {
+                noteFilterDeviceBanks[trackIndex] = track.createDeviceBank(16);
+            }
+            noteFilterDeviceBanks[trackIndex].setDeviceMatcher(noteFilterDeviceMatcher);
+
+            for (int j = 0; j < noteFilterDeviceBanks[trackIndex].getSizeOfBank(); j++) {
+                Device device = noteFilterDeviceBanks[trackIndex].getDevice(j);
+                if (device == null) continue;
+
+                device.exists().addValueObserver(exists -> {
+                    if (exists) {
+                        noteFilterDevices.put(trackIndex, device);
+                    }
+                });
+            }
+
+            // Layer and chain selector setup
+            deviceBanks[trackIndex] = track.createDeviceBank(24);
+            Device selectorDevice = deviceBanks[trackIndex].getDevice(1);
+            if (selectorDevice == null) continue;
+
+            layerBanks[trackIndex] = selectorDevice.createLayerBank(maxLayers);
+            chainSelectors[trackIndex] = selectorDevice.createChainSelector();
 
             for (int j = 0; j < maxLayers; j++) {
                 final int layerIndex = j;
                 DeviceLayer layer = layerBanks[trackIndex].getItemAt(layerIndex);
+                if (layer == null) continue;
+
+                if (layerDeviceBanks[trackIndex] == null) {
+                    layerDeviceBanks[trackIndex] = new DeviceBank[MAX_LAYERS];
+                }
+
                 layerDeviceBanks[trackIndex][layerIndex] = layer.createDeviceBank(1);
+
                 layer.name().addValueObserver(layerName -> {
                     trackLayerNames.get(trackIndex).put(layerName, layerIndex);
                 });
 
-                // Ensure the array is initialized before using it
                 if (cursorRemoteControlsPages != null) {
                     Device layerDevice = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
                     if (layerDevice != null) {
                         cursorRemoteControlsPages[trackIndex][layerIndex] = layerDevice.createCursorRemoteControlsPage(8);
-                        cursorRemoteControlsPages[trackIndex][layerIndex].pageCount().markInterested(); // ✅ Pre-mark interest
+                        cursorRemoteControlsPages[trackIndex][layerIndex].pageCount().markInterested();
                     }
                 }
             }
@@ -352,7 +446,7 @@ public class BitXExtension extends ControllerExtension {
                                 if (executor != null) {
                                     executor.execute(cmd.argument, trackIndex);
                                 } else {
-                                    host.println("Unknown command: " + cmd.command);
+                              //      host.println("Unknown command: " + cmd.command);
                                 }
                             }
                         }
@@ -442,10 +536,6 @@ public class BitXExtension extends ControllerExtension {
 //            data.append(volume).append(",");
 //        }
 //
-//        // Remove trailing comma & send to JavaFX
-//        if (data.length() > 0) {
-//            sendDataToJavaFX(data.substring(0, data.length() - 1)); // Remove last comma
-//        }
 
         // TODO: Send any updates here
     }

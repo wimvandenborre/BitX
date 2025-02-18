@@ -12,6 +12,9 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class BitXFunctions {
     private final ControllerHost host;
@@ -21,18 +24,22 @@ public class BitXFunctions {
     private final DeviceLayerBank[] layerBanks;
     private final ChainSelector[] chainSelectors;
     private final DeviceBank[][] layerDeviceBanks;
-    private final java.util.Map<Integer, java.util.Map<String, Integer>> trackLayerNames;
+    private final Map<Integer, Map<String, Integer>> trackLayerNames;
     private final CursorRemoteControlsPage[][] cursorRemoteControlsPages;
+    private final Map<Integer, List<Parameter>> trackChannelFilterParameters; // ✅ Now accessible
+    private final Map<Integer, List<Parameter>> trackNoteFilterParameters;
 
     public BitXFunctions(ControllerHost host,
                          Transport transport,
                          String drumPresetsPath,
                          DeviceBank[] deviceBanks,
+                         DeviceBank[] channelFilterDeviceBanks,
                          DeviceLayerBank[] layerBanks,
                          ChainSelector[] chainSelectors,
                          DeviceBank[][] layerDeviceBanks,
-                         java.util.Map<Integer, java.util.Map<String, Integer>> trackLayerNames,
-                         CursorRemoteControlsPage[][] cursorRemoteControlsPages) {
+                         Map<Integer, Map<String, Integer>> trackLayerNames,
+                         CursorRemoteControlsPage[][] cursorRemoteControlsPages,
+                         Map<Integer, List<Parameter>> trackChannelFilterParameters, Map<Integer, List<Parameter>> trackNoteFilterParameters) { // ✅ Add this
         this.host = host;
         this.transport = transport;
         this.drumPresetsPath = drumPresetsPath;
@@ -42,7 +49,103 @@ public class BitXFunctions {
         this.layerDeviceBanks = layerDeviceBanks;
         this.trackLayerNames = trackLayerNames;
         this.cursorRemoteControlsPages = cursorRemoteControlsPages;
+        this.trackChannelFilterParameters = trackChannelFilterParameters;
+        this.trackNoteFilterParameters = trackNoteFilterParameters;// ✅ Store it
     }
+
+
+
+
+    private int midiNoteFromString(String note) {
+        Map<String, Integer> noteMap = new HashMap<>();
+        String[] notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
+        for (int octave = -2; octave <= 8; octave++) {
+            for (int i = 0; i < notes.length; i++) {
+                String key = notes[i] + octave;
+                int midiNote = (octave + 2) * 12 + i;
+                noteMap.put(key, midiNote);
+            }
+        }
+
+        return noteMap.getOrDefault(note, -1);
+    }
+
+    public void changeNoteFilter(String arg, int trackIndex) {
+        host.println("Changing Note Filter on Track " + trackIndex + " with args: " + arg);
+
+        String[] args = arg.split(":");
+        if (args.length != 2) {
+            host.println("Invalid CNF format. Use: CNF C-2:G8");
+            return;
+        }
+
+        int minNote = midiNoteFromString(args[0].trim());
+        int maxNote = midiNoteFromString(args[1].trim());
+
+        if (minNote == -1 || maxNote == -1) {
+            host.println("Invalid note values in CNF command.");
+            return;
+        }
+
+        if (minNote > maxNote) {
+            host.println("Min note cannot be greater than max note. Swapping...");
+            int temp = minNote;
+            minNote = maxNote;
+            maxNote = temp;
+        }
+
+        List<Parameter> noteFilterParams = trackNoteFilterParameters.get(trackIndex);
+        if (noteFilterParams == null || noteFilterParams.size() < 2) {
+            host.println("No Note Filter parameters found on Track " + trackIndex);
+            return;
+        }
+
+        Parameter minKeyParam = noteFilterParams.get(0);
+        Parameter maxKeyParam = noteFilterParams.get(1);
+
+        minKeyParam.set(minNote / 127.0);
+        maxKeyParam.set(maxNote / 127.0);
+
+
+        host.println("Set Note Filter: MIN_KEY=" + minNote + " MAX_KEY=" + maxNote + " on Track " + trackIndex);
+    }
+
+
+    public void setChannelFilter(String arg, int trackIndex) {
+        host.println("Setting Channel Filter for Track " + trackIndex + " with args: " + arg);
+
+        List<Parameter> parameters = trackChannelFilterParameters.get(trackIndex);
+        if (parameters == null || parameters.isEmpty()) {
+            host.println("No channel filter parameters found for Track " + trackIndex);
+            return;
+        }
+
+        // ✅ Reset all parameters to 0
+        for (Parameter param : parameters) {
+            param.set(0.0);
+        }
+        host.println("All channels disabled on Track " + trackIndex);
+
+        // ✅ Parse the argument and enable selected channels
+        String[] selectedChannels = arg.split(":");
+        for (String channelStr : selectedChannels) {
+            try {
+                int channelIndex = Integer.parseInt(channelStr.trim()) - 1; // Convert to zero-based index
+                if (channelIndex >= 0 && channelIndex < parameters.size()) {
+                    parameters.get(channelIndex).set(1.0);
+                    host.println("Enabled SELECT_CHANNEL_" + (channelIndex + 1) + " on Track " + trackIndex);
+                } else {
+                    host.println("Invalid channel number: " + (channelIndex + 1));
+                }
+            } catch (NumberFormatException e) {
+                host.println("Error parsing channel number: " + channelStr);
+            }
+        }
+
+        host.println("Finished setting Channel Filter for Track " + trackIndex);
+    }
+
 
     public void displayTextInWindow(String text) {
         sendDataToJavaFX("CLIP:" + text); // Send clip name
@@ -188,6 +291,7 @@ public class BitXFunctions {
             host.println("❌ Error sending data to JavaFX: " + e.getMessage());
         }
     }
+
 
     private int validatePageNumber(String input) {
         try {
