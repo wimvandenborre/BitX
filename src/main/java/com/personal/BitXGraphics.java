@@ -27,10 +27,10 @@ public class BitXGraphics {
             int blue = (int) (b * 255);
 
             writer.println("COLOR:" + trackIndex + ":" + red + ":" + green + ":" + blue);
-            host.println("✅ Sent Track Color to JavaFX: Track " + trackIndex + ", RGB(" + red + "," + green + "," + blue + ")");
+           // host.println("Sent Track Color to JavaFX: Track " + trackIndex + ", RGB(" + red + "," + green + "," + blue + ")");
 
         } catch (Exception e) {
-            host.println("❌ Error sending Track Color: " + e.getMessage());
+            host.println("Error sending Track Color: " + e.getMessage());
         }
     }
 
@@ -41,7 +41,7 @@ public class BitXGraphics {
             writer.println("VU:" + trackIndex + ":" + vuValue);
 
         } catch (Exception e) {
-            host.println("❌ Error sending VU data: " + e.getMessage());
+          //  host.println("Error sending VU data: " + e.getMessage());
         }
     }
 
@@ -52,7 +52,7 @@ public class BitXGraphics {
             writer.println(message);
 
         } catch (Exception e) {
-            host.println("❌ Error sending data to JavaFX: " + e.getMessage());
+           // host.println("Error sending data to JavaFX: " + e.getMessage());
         }
     }
 
@@ -82,18 +82,17 @@ public class BitXGraphics {
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(displayProcess.getInputStream()))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
-                            host.println("JavaFX: " + line);
+                         //   host.println("JavaFX: " + line);
                         }
                     } catch (Exception e) {
-                        host.println("Error reading JavaFX output: " + e.getMessage());
+                   //     host.println("Error reading JavaFX output: " + e.getMessage());
                     }
                 }).start();
 
+              Thread.sleep(1000); // 🔄 Give JavaFX time to load
 
-                Thread.sleep(1000); // 🔄 Give JavaFX time to load
-
-                // 🔥 **Resend Actual Track Colors** After JavaFX Has Started
-                host.println("🎨 Resending track colors to JavaFX...");
+                // **Resend Actual Track Colors** After JavaFX Has Started
+             //   host.println("🎨 Resending track colors to JavaFX...");
 
             } catch (Exception e) {
                 host.println("Error starting JavaFX app: " + e.getMessage());

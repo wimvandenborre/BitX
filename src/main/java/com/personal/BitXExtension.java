@@ -41,9 +41,10 @@ public class BitXExtension extends ControllerExtension {
     // Outer key: x-coordinate (step); inner map: key (y) → note status.
     private final Map<Integer, Map<Integer, Integer>> currentNotesInClip = new HashMap<>();
 
+    //Preference settings in control Panel
     private Preferences prefs;
     private SettableRangedValue widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
-
+    private SettableBooleanValue displayWindowShowSetting;
     private Signal button_openPatreon;
     private Signal button_groovy;
 
@@ -54,7 +55,6 @@ public class BitXExtension extends ControllerExtension {
 
     private BitXGraphics bitXGraphics;
     // private Process displayProcess;  // Removed: now handled by BitXGraphics
-
 
     //ChannelFilter
     private final UUID channelFilterUUID = UUID.fromString("c5a1bb2d-a589-4fda-b3cf-911cfd6297be");
@@ -70,36 +70,31 @@ public class BitXExtension extends ControllerExtension {
     private DeviceMatcher noteFilterDeviceMatcher;
     private final Map<Integer, List<Parameter>> trackNoteFilterParameters = new HashMap<>();
 
-
-
     protected BitXExtension(final BitXExtensionDefinition definition, final ControllerHost host) {
         super(definition, host);
-
 
     }
 
     @Override
     public void init() {
 
-
-
         final ControllerHost host = getHost();
-
         documentState = host.getDocumentState();
+
         transport = host.createTransport();
         transport.tempo().value().addValueObserver(value -> {
-         //   host.println("Initial tempo value (normalized): " + value);
         });
 
         drumPresetsPath = Paths.get(System.getProperty("user.home"), "Documents", "Bitwig Studio", "Library", "Presets", "Drum Machine").toString();
 
-        // Initialize preferences, including the new layer preference
+        // Initialize preferences.
         prefs = host.getPreferences();
-       widthSetting = prefs.getNumberSetting("Bitmap Width", "Display", 40, 5000, 1, "pixels", 3024);
-       heightSetting = prefs.getNumberSetting("Bitmap Height", "Display", 40, 1200, 1, "pixels", 120);
+//        widthSetting = prefs.getNumberSetting("Bitmap Width", "Display", 40, 5000, 1, "pixels", 3024);
+//        heightSetting = prefs.getNumberSetting("Bitmap Height", "Display", 40, 1200, 1, "pixels", 120);
         tracknNumberSetting = prefs.getNumberSetting("Number of tracks", "Display", 1, 128, 1, "tracks", 32);
         sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 128);
         layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
+        displayWindowShowSetting = prefs.getBooleanSetting("Display Window", "Display", true);
 
         button_openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
         button_openPatreon.addSignalObserver(() -> openPatreonPage(host)); // ✅ Properly defined observer
@@ -114,10 +109,11 @@ public class BitXExtension extends ControllerExtension {
             shiftNotesLeft(cursorClipLauncher);
         });
 
-        int bitmapWidth = (int) widthSetting.getRaw();
-        if (bitmapWidth == 0) bitmapWidth = 400;
-        int bitmapHeight = (int) heightSetting.getRaw();
-        if (bitmapHeight == 0) bitmapHeight = 120;
+//        int bitmapWidth = (int) widthSetting.getRaw();
+//        if (bitmapWidth == 0) bitmapWidth = 400;
+//        int bitmapHeight = (int) heightSetting.getRaw();
+//        if (bitmapHeight == 0) bitmapHeight = 120;
+
         MAX_TRACKS = (int) tracknNumberSetting.getRaw();
         if (MAX_TRACKS == 0) MAX_TRACKS = 32;
         MAX_SCENES = (int) sceneNumberSetting.getRaw();
@@ -131,11 +127,20 @@ public class BitXExtension extends ControllerExtension {
         layerBanks = new DeviceLayerBank[MAX_TRACKS];
         chainSelectors = new ChainSelector[MAX_TRACKS];
         layerDeviceBanks = new DeviceBank[MAX_TRACKS][MAX_LAYERS];
-
         //textWindowBitmap = host.createBitmap(bitmapWidth, bitmapHeight, BitmapFormat.ARGB32);
         trackBank = host.createTrackBank(MAX_TRACKS, 0, MAX_SCENES, true);
         // Initialize BitXGraphics instance for JavaFX communication
+
+        // Display App init
         bitXGraphics = new BitXGraphics(host);
+
+        if (displayWindowShowSetting.get()) {
+            try {
+                bitXGraphics.startDisplayProcess();
+            } catch (Exception e) {
+                host.errorln("Failed to start display process: " + e.getMessage());
+            }
+        }
 
         //Initialize the master track
         MasterTrack masterTrack = getHost().createMasterTrack(0); // '0' means no send slots
@@ -154,20 +159,63 @@ public class BitXExtension extends ControllerExtension {
             bitXGraphics.sendDataToJavaFX("MASTER_COLOR:" + (int) (r * 255) + ":" + (int) (g * 255) + ":" + (int) (b * 255));
         });
 
+        //  Mark volume values as "interested"
+        for (int i = 0; i < 8; i++) {  // Only the first 8 tracks for faders
+            Track track = trackBank.getItemAt(i);
+
+            track.color().markInterested(); // Track color observation
+            track.volume().markInterested();
+            int trackIndex = i;
+            track.color().addValueObserver((r, g, b) -> {
+                bitXGraphics.sendTrackColorData(trackIndex, r, g, b);
+            });
+            // VU Meter Observer: Use 128 range and the sum of both channels
+            int finalI = i;
+            track.addVuMeterObserver(128, -1, false, newValue -> {
+                bitXGraphics.sendVuMeterData(finalI, newValue);
+            });
+        }
+
+        CursorTrack cursorTrack = host.createCursorTrack("RemoteControlsTrack", "Selected Track", 0, 0, true);
+        PinnableCursorDevice cursorDevice = cursorTrack.createCursorDevice("RemoteControlsDevice", "Selected Device", 0, CursorDeviceFollowMode.FOLLOW_SELECTION);
+        // Create a RemoteControlsPage for the selected device
+        cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
+
+        cursorRemoteControlsPages = new CursorRemoteControlsPage[MAX_TRACKS][MAX_LAYERS];
+
+        if (cursorRemoteControlsPage != null) {
+            cursorRemoteControlsPage.getName().addValueObserver(name -> {
+                bitXGraphics.sendDataToJavaFX("PAGE:" + name);
+            });
+
+            // Observe first 8 knobs
+            for (int i = 0; i < 8; i++) {
+                int index = i;
+                Parameter knob = cursorRemoteControlsPage.getParameter(i);
+                knob.name().addValueObserver(name -> {
+                    bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + index + ":" + name);
+                });
+
+                knob.value().addValueObserver(value -> {
+                    bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + index + ":" + value);
+                });
+            }
+        }
+
+        //Look for specific devices init
         channelFilterDevices.clear();
         specificChannelFilterDevices.clear();
         trackChannelFilterParameters.clear();
 
         for (int i = 0; i < MAX_TRACKS; i++) {
-            Track track = trackBank.getItemAt(i);
 
-            //ChannelFilter
+            Track track = trackBank.getItemAt(i);
             DeviceBank channelFilterDeviceBank = track.createDeviceBank(16);
             channelFilterDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(channelFilterUUID));
             Device device = channelFilterDeviceBank.getDevice(0); // The first matched device
             SpecificBitwigDevice specificChannelFilterDevice = device.createSpecificBitwigDevice(channelFilterUUID);
             specificChannelFilterDevices.put(i, specificChannelFilterDevice);
-            //Create premade parameter
+            //Create premade parameters
             List<Parameter> channelFilterparams = new ArrayList<>();
             for (int j = 1; j <= 16; j++) {
                 Parameter noteChannelParam = specificChannelFilterDevice.createParameter("SELECT_CHANNEL_" + j);
@@ -199,47 +247,7 @@ public class BitXExtension extends ControllerExtension {
 
         }
 
-        //  Mark volume values as "interested"
-        for (int i = 0; i < 8; i++) {  // Only the first 8 tracks for faders
-            Track track = trackBank.getItemAt(i);
-
-            track.color().markInterested(); // Track color observation
-            track.volume().markInterested();
-            int trackIndex = i;
-
-            track.color().addValueObserver((r, g, b) -> {
-                bitXGraphics.sendTrackColorData(trackIndex, r, g, b);
-            });
-
-            // VU Meter Observer: Use 128 range and the sum of both channels
-            int finalI = i;
-            track.addVuMeterObserver(128, -1, false, newValue -> {
-                bitXGraphics.sendVuMeterData(finalI, newValue);
-            });
-
-        }
-
-        cursorRemoteControlsPages = new CursorRemoteControlsPage[MAX_TRACKS][MAX_LAYERS];
-
-        if (cursorRemoteControlsPage != null) {
-            cursorRemoteControlsPage.getName().addValueObserver(name -> {
-                bitXGraphics.sendDataToJavaFX("PAGE:" + name);
-            });
-
-            // Observe first 8 knobs
-            for (int i = 0; i < 8; i++) {
-                int index = i;
-                Parameter knob = cursorRemoteControlsPage.getParameter(i);
-                knob.name().addValueObserver(name -> {
-                    bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + index + ":" + name);
-                });
-
-                knob.value().addValueObserver(value -> {
-                    bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + index + ":" + value);
-                });
-            }
-        }
-
+        //Nudging the groove
         // Create the two cursor clips.
         cursorClipArranger = host.createArrangerCursorClip(16 * 8, 128);
         cursorClipLauncher = host.createLauncherCursorClip(16 * 8, 128);
@@ -280,17 +288,10 @@ public class BitXExtension extends ControllerExtension {
         commands.put("BPM", (arg, trackIndex) -> bitXFunctions.setBpm(arg));
         commands.put("LIR", (arg, trackIndex) -> bitXFunctions.selectInstrumentInLayer(arg, trackIndex));
         commands.put("SPN", (arg, trackIndex) -> bitXFunctions.showPopupNotification(arg));
+        commands.put("SCF", (arg, trackIndex) -> bitXFunctions.setChannelFilter(arg, trackIndex));
         commands.put("CNF", (arg, trackIndex) -> bitXFunctions.changeNoteFilter(arg, trackIndex));
 
-
-
         initializeTrackAndClipObservers(host);
-
-        try {
-            bitXGraphics.startDisplayProcess();
-        } catch (Exception e) {
-
-        }
 
         host.showPopupNotification("BitX Initialized");
     }
@@ -393,7 +394,6 @@ public class BitXExtension extends ControllerExtension {
             deviceBanks[trackIndex] = track.createDeviceBank(24);
             Device selectorDevice = deviceBanks[trackIndex].getDevice(1);
             if (selectorDevice == null) continue;
-
             layerBanks[trackIndex] = selectorDevice.createLayerBank(maxLayers);
             chainSelectors[trackIndex] = selectorDevice.createChainSelector();
 

@@ -20,7 +20,7 @@
 		<dependency>
 			<groupId>com.bitwig</groupId>
 			<artifactId>extension-api</artifactId>
-			<version>18</version>
+			<version>20</version>
 		</dependency>
 		<!-- JavaFX Base Modules -->
 		<dependency>
