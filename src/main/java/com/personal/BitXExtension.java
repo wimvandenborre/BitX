@@ -354,7 +354,7 @@ public class BitXExtension extends ControllerExtension {
      * @param clip The currently active clip.
      */
     private void shiftNotesLeft(Clip clip) {
-        ControllerHost host = getHost();
+       // ControllerHost host = getHost();
         int movedCount = 0;
         for (Integer x : new ArrayList<>(currentNotesInClip.keySet())) {
             if (x > 0) { // do not shift notes at the leftmost position
