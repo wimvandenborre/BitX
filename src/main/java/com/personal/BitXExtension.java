@@ -26,6 +26,7 @@ public class BitXExtension extends ControllerExtension {
 
     private DeviceBank[] channelFilterDeviceBanks;
     private DeviceBank[] noteFilterDeviceBanks;
+    private DeviceBank[] noteTransposeDeviceBanks;
 
     private CursorRemoteControlsPage cursorRemoteControlsPage;
 
@@ -70,12 +71,19 @@ public class BitXExtension extends ControllerExtension {
     private DeviceMatcher channelFilterDeviceMatcher;
     private final Map<Integer, List<Parameter>> trackChannelFilterParameters = new HashMap<>();
 
-    //ChannelFilter
+    //noteFilter
     private final UUID noteFilterUUID = UUID.fromString("ef7559c8-49ae-4657-95be-11abb896c969");
     private final Map<Integer, Device> noteFilterDevices = new HashMap<>();
     private final Map<Integer, SpecificBitwigDevice> specificNoteFilterDevices = new HashMap<>();
     private DeviceMatcher noteFilterDeviceMatcher;
     private final Map<Integer, List<Parameter>> trackNoteFilterParameters = new HashMap<>();
+
+    //noteTranspose
+    private final UUID noteTransposeUUID = UUID.fromString("0815cd9e-3a31-4429-a268-dabd952a3b68");
+    private final Map<Integer, Device> noteTransposeDevices = new HashMap<>();
+    private final Map<Integer, SpecificBitwigDevice> specificNoteTransposeDevices = new HashMap<>();
+    private DeviceMatcher noteTransposeDeviceMatcher;
+    private final Map<Integer, List<Parameter>> trackNoteTransposeParameters = new HashMap<>();
 
 
 
@@ -135,6 +143,7 @@ public class BitXExtension extends ControllerExtension {
         instrumentSelectordeviceBanks = new DeviceBank[MAX_TRACKS];
         channelFilterDeviceBanks = new DeviceBank[MAX_TRACKS];
         noteFilterDeviceBanks = new DeviceBank[MAX_TRACKS];
+        noteTransposeDeviceBanks = new DeviceBank[MAX_TRACKS];
         layerBanks = new DeviceLayerBank[MAX_TRACKS];
         chainSelectors = new ChainSelector[MAX_TRACKS];
         layerDeviceBanks = new DeviceBank[MAX_TRACKS][MAX_LAYERS];
@@ -268,6 +277,31 @@ public class BitXExtension extends ControllerExtension {
             noteFilterParams.add(noteFilterParamMAX_KEY);
             trackNoteFilterParameters.put(i, noteFilterParams);
 
+
+            //noteTranspose
+            DeviceBank noteTransposeDeviceBank = track.createDeviceBank(16);
+            noteTransposeDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(noteTransposeUUID));
+            Device noteTransposedevice = noteTransposeDeviceBank.getDevice(0); // The first matched device
+            SpecificBitwigDevice specificNoteTransposeDevice = noteTransposedevice.createSpecificBitwigDevice(noteTransposeUUID);
+            specificNoteTransposeDevices.put(i, specificChannelFilterDevice);
+            Parameter noteTransposeOctaves = specificNoteTransposeDevice.createParameter("OCTAVES"); //-6 to +6
+            Parameter noteTransposeCoarse = specificNoteTransposeDevice.createParameter("COARSE"); // -96 to + 96
+            Parameter noteTransposeFine = specificNoteTransposeDevice.createParameter("FINE"); // -200% to + 200%
+
+            noteTransposeOctaves.name().markInterested();
+            noteTransposeOctaves.value().markInterested();
+            noteTransposeCoarse.name().markInterested();
+            noteTransposeCoarse.value().markInterested();
+            noteTransposeFine.name().markInterested();
+            noteTransposeFine.value().markInterested();
+
+            List<Parameter> noteTransposeParams = new ArrayList<>();
+            noteTransposeParams.add(noteTransposeOctaves);
+            noteTransposeParams.add(noteTransposeCoarse);
+            noteTransposeParams.add(noteTransposeFine);
+
+            trackNoteTransposeParameters.put(i, noteTransposeParams);
+
         }
 
         //Nudging the groove
@@ -304,7 +338,8 @@ public class BitXExtension extends ControllerExtension {
                 trackLayerNames,
                 cursorRemoteControlsPages,
                 trackChannelFilterParameters,
-                trackNoteFilterParameters
+                trackNoteFilterParameters,
+                trackNoteTransposeParameters
         );
         commands.put("SMW", (arg, trackIndex) -> bitXFunctions.displayTextInWindow(arg));
         commands.put("LDR", (arg, trackIndex) -> bitXFunctions.executeLDRCommand(arg, trackIndex));
@@ -313,6 +348,7 @@ public class BitXExtension extends ControllerExtension {
         commands.put("SPN", (arg, trackIndex) -> bitXFunctions.showPopupNotification(arg));
         commands.put("SCF", (arg, trackIndex) -> bitXFunctions.setChannelFilter(arg, trackIndex));
         commands.put("CNF", (arg, trackIndex) -> bitXFunctions.changeNoteFilter(arg, trackIndex));
+        commands.put("SNT", (arg, trackIndex) -> bitXFunctions.setNoteTranspose(arg, trackIndex));
 
         initializeTrackAndClipObservers(host);
 
@@ -413,11 +449,28 @@ public class BitXExtension extends ControllerExtension {
                 });
             }
 
+            //noteTranspose
+            if (noteTransposeDeviceBanks[trackIndex] == null) {
+                noteTransposeDeviceBanks[trackIndex] = track.createDeviceBank(16);
+            }
+            noteTransposeDeviceBanks[trackIndex].setDeviceMatcher(noteTransposeDeviceMatcher);
+
+            for (int j = 0; j < noteTransposeDeviceBanks[trackIndex].getSizeOfBank(); j++) {
+                Device device = noteTransposeDeviceBanks[trackIndex].getDevice(j);
+                if (device == null) continue;
+
+                device.exists().addValueObserver(exists -> {
+                    if (exists) {
+                        noteTransposeDevices.put(trackIndex, device);
+                    }
+                });
+            }
+
 // Instrument Selector and layers setup
             
             trackLayerNames.put(trackIndex, new HashMap<>());
-            instrumentSelectordeviceBanks[trackIndex] = track.createDeviceBank(4);
-            Device device = instrumentSelectordeviceBanks[trackIndex].getDevice(3);
+            instrumentSelectordeviceBanks[trackIndex] = track.createDeviceBank(6);
+            Device device = instrumentSelectordeviceBanks[trackIndex].getDevice(5);
             layerBanks[trackIndex] = device.createLayerBank(maxLayers);
             chainSelectors[trackIndex] = device.createChainSelector();
 

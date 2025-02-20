@@ -28,6 +28,7 @@ public class BitXFunctions {
     private final CursorRemoteControlsPage[][] cursorRemoteControlsPages;
     private final Map<Integer, List<Parameter>> trackChannelFilterParameters; // ✅ Now accessible
     private final Map<Integer, List<Parameter>> trackNoteFilterParameters;
+    private final Map<Integer, List<Parameter>> trackNoteTransposeParameters;
 
     public BitXFunctions(ControllerHost host,
                          Transport transport,
@@ -39,7 +40,7 @@ public class BitXFunctions {
                          DeviceBank[][] layerDeviceBanks,
                          Map<Integer, Map<String, Integer>> trackLayerNames,
                          CursorRemoteControlsPage[][] cursorRemoteControlsPages,
-                         Map<Integer, List<Parameter>> trackChannelFilterParameters, Map<Integer, List<Parameter>> trackNoteFilterParameters) { // ✅ Add this
+                         Map<Integer, List<Parameter>> trackChannelFilterParameters, Map<Integer, List<Parameter>> trackNoteFilterParameters, Map<Integer, List<Parameter>> trackNoteTransposeParameters) { // ✅ Add this
         this.host = host;
         this.transport = transport;
         this.drumPresetsPath = drumPresetsPath;
@@ -51,10 +52,8 @@ public class BitXFunctions {
         this.cursorRemoteControlsPages = cursorRemoteControlsPages;
         this.trackChannelFilterParameters = trackChannelFilterParameters;
         this.trackNoteFilterParameters = trackNoteFilterParameters;// ✅ Store it
+        this.trackNoteTransposeParameters = trackNoteTransposeParameters;
     }
-
-
-
 
     private int midiNoteFromString(String note) {
         Map<String, Integer> noteMap = new HashMap<>();
@@ -145,6 +144,95 @@ public class BitXFunctions {
 
         host.println("Finished setting Channel Filter for Track " + trackIndex);
     }
+
+    public void setNoteTranspose(String arg, int trackIndex) {
+        host.println("Changing Note Transpose on Track " + trackIndex + " with args: " + arg);
+
+        // Split the argument by colon.
+        String[] parts = arg.split(":");
+
+        double octave = 0.0;
+        double coarse = 0.0;
+        double fine = 0.0;
+
+        try {
+            if (parts.length == 3) {
+                // Format: <octave>:<coarse>:<fine>
+                octave = Double.parseDouble(parts[0].trim());
+                coarse = Double.parseDouble(parts[1].trim());
+                fine = Double.parseDouble(parts[2].trim());
+            } else if (parts.length == 2) {
+                // Format: <octave>:<coarse>, fine defaults to 0.
+                octave = Double.parseDouble(parts[0].trim());
+                coarse = Double.parseDouble(parts[1].trim());
+                fine = 0.0;
+            } else if (parts.length == 1) {
+                // Only one value provided; treat it as a fine adjustment.
+                octave = Double.parseDouble(parts[0].trim());
+                coarse = 0.0;
+                fine = 0.0;
+            } else {
+                host.println("Invalid transpose format. Use: CNF <octave>:<coarse>:<fine>");
+                return;
+            }
+        } catch (NumberFormatException e) {
+            host.println("Invalid number format in transpose command: " + e.getMessage());
+            return;
+        }
+
+        // Validate ranges.
+        if (octave < -3 || octave > 3) {
+            host.println("Octave value must be between -3 and +3.");
+            return;
+        }
+        if (coarse < - 48 || coarse > 48) {
+            host.println("Coarse value must be between -96 and +96.");
+            return;
+        }
+        if (fine < -100 || fine > 100) {
+            host.println("Fine value must be between -200 and +200.");
+            return;
+        }
+
+        // Normalize values (assuming parameters expect a normalized value between 0 and 1 with center at 0.5):
+        double normalizedOctave = (3 - octave) / 6.0;      // Range: -3 -> 0, +3 -> 1
+        double normalizedCoarse = (coarse + 48) / 96.0;      // Range: -96 -> 0, +96 -> 1
+        double normalizedFine   = (fine + 100) / 200.0;       // Range: -200 -> 0, +200 -> 1
+
+        // Retrieve the note transpose parameters for the track.
+        // (This map should have been initialized during driver init, and may contain 1 to 3 parameters.)
+        List<Parameter> transposeParams = trackNoteTransposeParameters.get(trackIndex);
+        if (transposeParams == null || transposeParams.isEmpty()) {
+            host.println("No Note Transpose parameters found on Track " + trackIndex);
+            return;
+        }
+
+        // Now, update the parameters that exist.
+        // If three parameters are available, assume the order is: octave, coarse, fine.
+        // If only one parameter is available, update it with the fine value.
+        if (transposeParams.size() >= 3) {
+            Parameter octaveParam = transposeParams.get(0);
+            Parameter coarseParam = transposeParams.get(1);
+            Parameter fineParam = transposeParams.get(2);
+            octaveParam.set(normalizedOctave);
+            coarseParam.set(normalizedCoarse);
+            fineParam.set(normalizedFine);
+        } else if (transposeParams.size() == 2) {
+            Parameter octaveParam = transposeParams.get(0);
+            Parameter coarseParam = transposeParams.get(1);
+            octaveParam.set(normalizedOctave);
+            coarseParam.set(normalizedCoarse);
+        } else { // Only one parameter available.
+            Parameter singleParam = transposeParams.get(0);
+            singleParam.set(normalizedOctave);
+        }
+
+        host.println("Set Note Transpose on Track " + trackIndex +
+                ": Octave=" + octave + " (norm: " + normalizedOctave + "), " +
+                "Coarse=" + coarse + " (norm: " + normalizedCoarse + "), " +
+                "Fine=" + fine + " (norm: " + normalizedFine + ").");
+    }
+
 
 
     public void displayTextInWindow(String text) {
