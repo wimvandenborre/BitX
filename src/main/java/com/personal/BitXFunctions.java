@@ -234,7 +234,7 @@ public class BitXFunctions {
         String[] parts = commandArgs.split(":");
         String instrumentName = parts[0].trim();
 
-        // ✅ Validate and adjust the page number (User inputs 1-based, so we subtract 1)
+        // Validate and adjust the page number (User inputs 1-based, so we subtract 1)
         int remotePageIndex = (parts.length > 1) ? validatePageNumber(parts[1].trim()) - 1 : -1;
 
         ChainSelector selector = chainSelectors[trackIndex];
@@ -254,26 +254,26 @@ public class BitXFunctions {
             Device deviceForSelectedLayer = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
             if (deviceForSelectedLayer != null) {
                 deviceForSelectedLayer.selectInEditor();
-                host.println("✅ Instrument layer selected: " + instrumentName);
+                host.println("Instrument layer selected: " + instrumentName);
 
-                // ✅ Use pre-initialized CursorRemoteControlsPage
+                //Use pre-initialized CursorRemoteControlsPage
                 CursorRemoteControlsPage cursorPage = cursorRemoteControlsPages[trackIndex][layerIndex];
 
                 if (cursorPage != null && remotePageIndex >= 0) {
-                    int totalPages = cursorPage.pageCount().get(); // ✅ Safe to access
+                    int totalPages = cursorPage.pageCount().get(); //Safe to access
 
                     if (remotePageIndex < totalPages) {
                         cursorPage.selectedPageIndex().set(remotePageIndex);
-                        host.println("✅ Remote Controls Page selected: " + (remotePageIndex + 1)); // Show 1-based page number
+                        host.println("Remote Controls Page selected: " + (remotePageIndex + 1)); // Show 1-based page number
                     } else {
-                        host.println("⚠️ Error: Remote Controls Page " + (remotePageIndex + 1) + " does not exist.");
+                        host.println("⚠Error: Remote Controls Page " + (remotePageIndex + 1) + " does not exist.");
                     }
                 }
             } else {
-                host.println("⚠️ No device found in the selected layer for instrument: " + instrumentName);
+                host.println("No device found in the selected layer for instrument: " + instrumentName);
             }
         } else {
-            host.println("⚠️ Error: Instrument layer not found: " + instrumentName);
+            host.println("Error: Instrument layer not found: " + instrumentName);
         }
     }
 

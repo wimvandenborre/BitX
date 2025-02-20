@@ -19,7 +19,7 @@ public class BitXExtension extends ControllerExtension {
 
     private DocumentState documentState;
 
-    private DeviceBank[] deviceBanks;
+    private DeviceBank[] instrumentSelectordeviceBanks;
     private DeviceLayerBank[] layerBanks;
     private ChainSelector[] chainSelectors;
     private DeviceBank[][] layerDeviceBanks;
@@ -56,6 +56,13 @@ public class BitXExtension extends ControllerExtension {
     private BitXGraphics bitXGraphics;
     // private Process displayProcess;  // Removed: now handled by BitXGraphics
 
+    //Instrument Selector
+
+    private final UUID instrumentSelectorUUID = UUID.fromString("9588fbcf-721a-438b-8555-97e4231f7d2c");
+    private final Map<Integer, Device> instrumentSelectorDevices = new HashMap<>();
+    private final Map<Integer, SpecificBitwigDevice> specificInstrumentSelectorDevices = new HashMap<>();
+    private DeviceMatcher instrumentSelectorDeviceMatcher;
+
     //ChannelFilter
     private final UUID channelFilterUUID = UUID.fromString("c5a1bb2d-a589-4fda-b3cf-911cfd6297be");
     private final Map<Integer, Device> channelFilterDevices = new HashMap<>();
@@ -69,6 +76,10 @@ public class BitXExtension extends ControllerExtension {
     private final Map<Integer, SpecificBitwigDevice> specificNoteFilterDevices = new HashMap<>();
     private DeviceMatcher noteFilterDeviceMatcher;
     private final Map<Integer, List<Parameter>> trackNoteFilterParameters = new HashMap<>();
+
+
+
+
 
     protected BitXExtension(final BitXExtensionDefinition definition, final ControllerHost host) {
         super(definition, host);
@@ -121,7 +132,7 @@ public class BitXExtension extends ControllerExtension {
         MAX_LAYERS = (int) layerNumberSetting.getRaw();
 
         // Initialize dynamic arrays based on preferences
-        deviceBanks = new DeviceBank[MAX_TRACKS];
+        instrumentSelectordeviceBanks = new DeviceBank[MAX_TRACKS];
         channelFilterDeviceBanks = new DeviceBank[MAX_TRACKS];
         noteFilterDeviceBanks = new DeviceBank[MAX_TRACKS];
         layerBanks = new DeviceLayerBank[MAX_TRACKS];
@@ -206,14 +217,26 @@ public class BitXExtension extends ControllerExtension {
         channelFilterDevices.clear();
         specificChannelFilterDevices.clear();
         trackChannelFilterParameters.clear();
+        instrumentSelectorDevices.clear();
 
         for (int i = 0; i < MAX_TRACKS; i++) {
 
             Track track = trackBank.getItemAt(i);
+
+            // Instrument Selector: create a device bank and set its matcher.
+
+          //  DeviceBank instrumentSelectorDeviceBank = track.createDeviceBank(16);
+           // instrumentSelectorDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(instrumentSelectorUUID));
+        //    Device instrumentSelectorDevice = instrumentSelectorDeviceBank.getDevice(0); // The first matched device.
+         //   SpecificBitwigDevice specificInstrumentSelectorDevice = instrumentSelectorDevice.createSpecificBitwigDevice(instrumentSelectorUUID);
+           // specificInstrumentSelectorDevices.put(i, specificInstrumentSelectorDevice);
+
+
+            //noteFilter
             DeviceBank channelFilterDeviceBank = track.createDeviceBank(16);
             channelFilterDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(channelFilterUUID));
-            Device device = channelFilterDeviceBank.getDevice(0); // The first matched device
-            SpecificBitwigDevice specificChannelFilterDevice = device.createSpecificBitwigDevice(channelFilterUUID);
+            Device channelFilterdevice = channelFilterDeviceBank.getDevice(0); // The first matched device
+            SpecificBitwigDevice specificChannelFilterDevice = channelFilterdevice.createSpecificBitwigDevice(channelFilterUUID);
             specificChannelFilterDevices.put(i, specificChannelFilterDevice);
             //Create premade parameters
             List<Parameter> channelFilterparams = new ArrayList<>();
@@ -273,7 +296,7 @@ public class BitXExtension extends ControllerExtension {
                 host,
                 transport,
                 drumPresetsPath,
-                deviceBanks,
+                instrumentSelectordeviceBanks,
                 channelFilterDeviceBanks,
                 layerBanks,
                 chainSelectors,
@@ -390,39 +413,33 @@ public class BitXExtension extends ControllerExtension {
                 });
             }
 
-            // Layer and chain selector setup
-            deviceBanks[trackIndex] = track.createDeviceBank(24);
-            Device selectorDevice = deviceBanks[trackIndex].getDevice(1);
-            if (selectorDevice == null) continue;
-            layerBanks[trackIndex] = selectorDevice.createLayerBank(maxLayers);
-            chainSelectors[trackIndex] = selectorDevice.createChainSelector();
+// Instrument Selector and layers setup
+            
+            trackLayerNames.put(trackIndex, new HashMap<>());
+            instrumentSelectordeviceBanks[trackIndex] = track.createDeviceBank(4);
+            Device device = instrumentSelectordeviceBanks[trackIndex].getDevice(3);
+            layerBanks[trackIndex] = device.createLayerBank(maxLayers);
+            chainSelectors[trackIndex] = device.createChainSelector();
 
             for (int j = 0; j < maxLayers; j++) {
                 final int layerIndex = j;
                 DeviceLayer layer = layerBanks[trackIndex].getItemAt(layerIndex);
-                if (layer == null) continue;
-
-                if (layerDeviceBanks[trackIndex] == null) {
-                    layerDeviceBanks[trackIndex] = new DeviceBank[MAX_LAYERS];
-                }
-
                 layerDeviceBanks[trackIndex][layerIndex] = layer.createDeviceBank(1);
-
                 layer.name().addValueObserver(layerName -> {
                     trackLayerNames.get(trackIndex).put(layerName, layerIndex);
                 });
 
+                // Ensure the array is initialized before using it
                 if (cursorRemoteControlsPages != null) {
                     Device layerDevice = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
                     if (layerDevice != null) {
                         cursorRemoteControlsPages[trackIndex][layerIndex] = layerDevice.createCursorRemoteControlsPage(8);
-                        cursorRemoteControlsPages[trackIndex][layerIndex].pageCount().markInterested();
+                        cursorRemoteControlsPages[trackIndex][layerIndex].pageCount().markInterested(); // ✅ Pre-mark interest
                     }
                 }
             }
         }
     }
-
 
     private void initializeTrackAndClipObservers(final ControllerHost host) {
         for (int i = 0; i < MAX_TRACKS; i++) {
