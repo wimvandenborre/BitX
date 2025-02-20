@@ -36,3 +36,5 @@ Available commands at this time:
 
 ()CNF D1:E5 -> Change the key range for the note filter device.
 
+()SNT octave:coarse:fine -> for example: ()SNT 2:30:-40
+
