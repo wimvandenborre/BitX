@@ -434,7 +434,7 @@ public class BitXExtension extends ControllerExtension {
                     Device layerDevice = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
                     if (layerDevice != null) {
                         cursorRemoteControlsPages[trackIndex][layerIndex] = layerDevice.createCursorRemoteControlsPage(8);
-                        cursorRemoteControlsPages[trackIndex][layerIndex].pageCount().markInterested(); // ✅ Pre-mark interest
+                        cursorRemoteControlsPages[trackIndex][layerIndex].pageCount().markInterested();
                     }
                 }
             }
