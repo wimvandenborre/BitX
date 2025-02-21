@@ -49,7 +49,10 @@ public class BitXExtension extends ControllerExtension {
     private Signal button_openPatreon;
     private Signal button_groovy;
 
-    private Map<String, CommandExecutor> commands = new HashMap<>();
+
+    //private Map<String, CommandExecutor> commands = new HashMap<>();
+
+    private Map<String, CommandEntry> commands = new HashMap<>();
 
     // Map to store track layer names for each track
     private Map<Integer, Map<String, Integer>> trackLayerNames = new HashMap<>();
@@ -84,9 +87,6 @@ public class BitXExtension extends ControllerExtension {
     private final Map<Integer, SpecificBitwigDevice> specificNoteTransposeDevices = new HashMap<>();
     private DeviceMatcher noteTransposeDeviceMatcher;
     private final Map<Integer, List<Parameter>> trackNoteTransposeParameters = new HashMap<>();
-
-
-
 
 
     protected BitXExtension(final BitXExtensionDefinition definition, final ControllerHost host) {
@@ -127,6 +127,7 @@ public class BitXExtension extends ControllerExtension {
         button_groovy.addSignalObserver(() -> {
             shiftNotesLeft(cursorClipLauncher);
         });
+
 
 //        int bitmapWidth = (int) widthSetting.getRaw();
 //        if (bitmapWidth == 0) bitmapWidth = 400;
@@ -239,6 +240,7 @@ public class BitXExtension extends ControllerExtension {
         //    Device instrumentSelectorDevice = instrumentSelectorDeviceBank.getDevice(0); // The first matched device.
          //   SpecificBitwigDevice specificInstrumentSelectorDevice = instrumentSelectorDevice.createSpecificBitwigDevice(instrumentSelectorUUID);
            // specificInstrumentSelectorDevices.put(i, specificInstrumentSelectorDevice);
+           // specificInstrumentSelectorDevices.put(i, specificInstrumentSelectorDevice);
 
 
             //noteFilter
@@ -341,19 +343,79 @@ public class BitXExtension extends ControllerExtension {
                 trackNoteFilterParameters,
                 trackNoteTransposeParameters
         );
-        commands.put("SMW", (arg, trackIndex) -> bitXFunctions.displayTextInWindow(arg));
-        commands.put("LDR", (arg, trackIndex) -> bitXFunctions.executeLDRCommand(arg, trackIndex));
-        commands.put("BPM", (arg, trackIndex) -> bitXFunctions.setBpm(arg));
-        commands.put("LIR", (arg, trackIndex) -> bitXFunctions.selectInstrumentInLayer(arg, trackIndex));
-        commands.put("SPN", (arg, trackIndex) -> bitXFunctions.showPopupNotification(arg));
-        commands.put("SCF", (arg, trackIndex) -> bitXFunctions.setChannelFilter(arg, trackIndex));
-        commands.put("CNF", (arg, trackIndex) -> bitXFunctions.changeNoteFilter(arg, trackIndex));
-        commands.put("SNT", (arg, trackIndex) -> bitXFunctions.setNoteTranspose(arg, trackIndex));
+
+        commands.put("BPM", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.setBpm(arg),
+                "BPM: Sets the BPM. Usage: BPM <value>."
+        ));
+
+
+        commands.put("LDR", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.executeLDRCommand(arg, trackIndex),
+                "LDR: Executes the LDR command. Usage: LDR <arg>."
+        ));
+
+        commands.put("LIR", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.selectInstrumentInLayer(arg, trackIndex),
+                "LIR: Selects an instrument in the current layer. Usage: LIR <identifier>."
+        ));
+
+        commands.put("SCF", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.setChannelFilter(arg, trackIndex),
+                "SCF: Sets the channel filter. Usage: SCF <parameters>."
+        ));
+
+
+        commands.put("SMW", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.displayTextInWindow(arg),
+                "SMW: Displays a message in a window. Usage: SMW <message>."
+        ));
+
+
+        commands.put("SNF", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.setNoteFilter(arg, trackIndex),
+                "SNF: Sets the note filter. Usage: SNF <parameters>."
+        ));
+
+        commands.put("SNT", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.setNoteTranspose(arg, trackIndex),
+                "SNT: Sets note transposition. Usage: SNT <octave>:<coarse>:<fine> (fine is optional)."
+        ));
+
+        commands.put("SPN", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.showPopupNotification(arg),
+                "SPN: Shows a popup notification. Usage: SPN <message>."
+        ));
+
+        SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "Command Documentation");
+        SettableEnumValue commandDropDown = documentState.getEnumSetting(
+                "Command", "Commands", commands.keySet().toArray(new String[0]), "SMW"
+        );
+        commandDropDown.markInterested();
+        commandDropDown.addValueObserver(selectedValue -> {
+            CommandEntry entry = commands.get(selectedValue);
+            if (entry != null) {
+                showCommandDocumentation.set(entry.documentation);
+            }
+        });
+
+
 
         initializeTrackAndClipObservers(host);
 
         host.showPopupNotification("BitX Initialized");
     }
+
+    public class CommandEntry {
+        public final CommandExecutor executor;
+        public final String documentation;
+
+        public CommandEntry(CommandExecutor executor, String documentation) {
+            this.executor = executor;
+            this.documentation = documentation;
+        }
+    }
+
 
     private void observingNotes(int x, int y, int stat) {
 
@@ -512,11 +574,11 @@ public class BitXExtension extends ControllerExtension {
                         if (clipName != null && clipName.startsWith("()")) {
                             List<CommandWithArgument> commandsToExecute = parseCommands(clipName);
                             for (CommandWithArgument cmd : commandsToExecute) {
-                                CommandExecutor executor = commands.get(cmd.command);
-                                if (executor != null) {
-                                    executor.execute(cmd.argument, trackIndex);
+                                CommandEntry entry = commands.get(cmd.command);
+                                if (entry != null) {
+                                    entry.executor.execute(cmd.argument, trackIndex);
                                 } else {
-                              //      host.println("Unknown command: " + cmd.command);
+                                    // host.println("Unknown command: " + cmd.command);
                                 }
                             }
                         }

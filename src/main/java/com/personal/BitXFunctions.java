@@ -70,8 +70,7 @@ public class BitXFunctions {
         return noteMap.getOrDefault(note, -1);
     }
 
-    public void changeNoteFilter(String arg, int trackIndex) {
-        host.println("Changing Note Filter on Track " + trackIndex + " with args: " + arg);
+    public void setNoteFilter(String arg, int trackIndex) {
 
         String[] args = arg.split(":");
         if (args.length != 2) {

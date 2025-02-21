@@ -17,7 +17,7 @@ This will change the drumrack for that track
 
 6) Multiple commands per line are now possible: ()BPM 120 ()SMW Hello World ()SPN Notification Message
 
-7) Channel filter and Note range commands are availabe, see below
+7) Channel filter, Note range and Note Transpose commands are availabe, see below
   
 Available commands at this time:
 
@@ -32,9 +32,8 @@ Available commands at this time:
 
 ()SPN "Message" -> Show a popup Message that dissapears after a few seconds
 
-()SCF channelnumbers -> Set Channel filter. Will get the first channel filter on the track and set the channels/ ()SCF 1:5:9 for example, you can set one ore more channels
+()SCF 1:5:9 -> Set Channel filter -> Will get the first channel filter on the track and set the channels/ 
 
-()CNF D1:E5 -> Change the key range for the note filter device.
+()SNF D1:E5 ->  Set Note Filter -> Change the key range for the note filter device.
 
-()SNT octave:coarse:fine -> for example: ()SNT 2:30:-40
-
+()SNT octave:coarse:fine -> Set Note Transpose -> for example: ()SNT 2:30:-40
