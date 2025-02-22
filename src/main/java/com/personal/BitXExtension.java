@@ -44,7 +44,7 @@ public class BitXExtension extends ControllerExtension {
 
     //Preference settings in control Panel
     private Preferences prefs;
-    private SettableRangedValue widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
+    private SettableRangedValue instrumentSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
     private SettableBooleanValue displayWindowShowSetting;
     private Signal button_openPatreon;
     private Signal button_groovy;
@@ -73,6 +73,7 @@ public class BitXExtension extends ControllerExtension {
     private final Map<Integer, SpecificBitwigDevice> specificChannelFilterDevices = new HashMap<>();
     private DeviceMatcher channelFilterDeviceMatcher;
     private final Map<Integer, List<Parameter>> trackChannelFilterParameters = new HashMap<>();
+
 
     //noteFilter
     private final UUID noteFilterUUID = UUID.fromString("ef7559c8-49ae-4657-95be-11abb896c969");
@@ -108,6 +109,7 @@ public class BitXExtension extends ControllerExtension {
 
         // Initialize preferences.
         prefs = host.getPreferences();
+        instrumentSelectorPosition = prefs.getNumberSetting("Instr Selector track position", "Tracks", 1, 64, 1, "Position", 6);
 //        widthSetting = prefs.getNumberSetting("Bitmap Width", "Display", 40, 5000, 1, "pixels", 3024);
 //        heightSetting = prefs.getNumberSetting("Bitmap Height", "Display", 40, 1200, 1, "pixels", 120);
         tracknNumberSetting = prefs.getNumberSetting("Number of tracks", "Display", 1, 128, 1, "tracks", 32);
@@ -243,14 +245,14 @@ public class BitXExtension extends ControllerExtension {
            // specificInstrumentSelectorDevices.put(i, specificInstrumentSelectorDevice);
 
 
-            //noteFilter
+            //channelFilter
             DeviceBank channelFilterDeviceBank = track.createDeviceBank(16);
             channelFilterDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(channelFilterUUID));
-            Device channelFilterdevice = channelFilterDeviceBank.getDevice(0); // The first matched device
+           Device channelFilterdevice = channelFilterDeviceBank.getDevice(0); // The first matched device
             SpecificBitwigDevice specificChannelFilterDevice = channelFilterdevice.createSpecificBitwigDevice(channelFilterUUID);
             specificChannelFilterDevices.put(i, specificChannelFilterDevice);
-            //Create premade parameters
-            List<Parameter> channelFilterparams = new ArrayList<>();
+           // Create premade parameters
+      List<Parameter> channelFilterparams = new ArrayList<>();
             for (int j = 1; j <= 16; j++) {
                 Parameter noteChannelParam = specificChannelFilterDevice.createParameter("SELECT_CHANNEL_" + j);
                 noteChannelParam.name().markInterested();
@@ -264,7 +266,7 @@ public class BitXExtension extends ControllerExtension {
             noteFilterDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(noteFilterUUID));
             Device noteFilterdevice = noteFilterDeviceBank.getDevice(0); // The first matched device
             SpecificBitwigDevice specificNoteFilterDevice = noteFilterdevice.createSpecificBitwigDevice(noteFilterUUID);
-            specificNoteFilterDevices.put(i, specificChannelFilterDevice);
+            specificNoteFilterDevices.put(i, specificNoteFilterDevice);
 
             Parameter noteFilterParamMIN_KEY = specificNoteFilterDevice.createParameter("MIN_KEY");
             Parameter noteFilterParamMAX_KEY = specificNoteFilterDevice.createParameter("MAX_KEY");
@@ -285,7 +287,7 @@ public class BitXExtension extends ControllerExtension {
             noteTransposeDeviceBank.setDeviceMatcher(host.createBitwigDeviceMatcher(noteTransposeUUID));
             Device noteTransposedevice = noteTransposeDeviceBank.getDevice(0); // The first matched device
             SpecificBitwigDevice specificNoteTransposeDevice = noteTransposedevice.createSpecificBitwigDevice(noteTransposeUUID);
-            specificNoteTransposeDevices.put(i, specificChannelFilterDevice);
+            specificNoteTransposeDevices.put(i, specificNoteTransposeDevice);
             Parameter noteTransposeOctaves = specificNoteTransposeDevice.createParameter("OCTAVES"); //-6 to +6
             Parameter noteTransposeCoarse = specificNoteTransposeDevice.createParameter("COARSE"); // -96 to + 96
             Parameter noteTransposeFine = specificNoteTransposeDevice.createParameter("FINE"); // -200% to + 200%
@@ -346,51 +348,54 @@ public class BitXExtension extends ControllerExtension {
 
         commands.put("BPM", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.setBpm(arg),
-                "BPM: Sets the BPM. Usage: BPM <value>."
+                "BPM: Sets the BPM. Usage: ()BPM <value>."
         ));
 
 
         commands.put("LDR", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.executeLDRCommand(arg, trackIndex),
-                "LDR: Executes the LDR command. Usage: LDR <arg>."
+                "LDR: Load Drum rack. Usage: ()LDR <presetname>."
         ));
 
         commands.put("LIR", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.selectInstrumentInLayer(arg, trackIndex),
-                "LIR: Selects an instrument in the current layer. Usage: LIR <identifier>."
+                "LIR: Select instrument in Instrument Selector (Needs to in position 6 on track). Usage: ()LIR <presetname>:<optionalremotecontrolspage> ."
         ));
 
         commands.put("SCF", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.setChannelFilter(arg, trackIndex),
-                "SCF: Sets the channel filter. Usage: SCF <parameters>."
+                "SCF: Set Channel filter. Usage: ()SCF <1:3:5 ...>."
         ));
 
 
         commands.put("SMW", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.displayTextInWindow(arg),
-                "SMW: Displays a message in a window. Usage: SMW <message>."
+                "SMW: Displays a message in the DisplayWindow. Usage: ()SMW <message>."
         ));
 
 
         commands.put("SNF", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.setNoteFilter(arg, trackIndex),
-                "SNF: Sets the note filter. Usage: SNF <parameters>."
+                "SNF: Sets note filter. Usage: SNF <E2>:<D5>."
         ));
 
         commands.put("SNT", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.setNoteTranspose(arg, trackIndex),
-                "SNT: Sets note transposition. Usage: SNT <octave>:<coarse>:<fine> (fine is optional)."
+                "SNT: Sets note transposition. Usage: ()SNT <octave>:<coarse>:<fine> (Last 2 optional)."
         ));
 
         commands.put("SPN", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.showPopupNotification(arg),
-                "SPN: Shows a popup notification. Usage: SPN <message>."
+                "SPN: Show popup notification. Usage: SPN <message>."
         ));
 
         SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "Command Documentation");
+        String[] options = commands.keySet().toArray(new String[0]);
+        Arrays.sort(options);  // Sorts alphabetically
         SettableEnumValue commandDropDown = documentState.getEnumSetting(
-                "Command", "Commands", commands.keySet().toArray(new String[0]), "SMW"
+                "Command", "Commands", options, "BPM"
         );
+
         commandDropDown.markInterested();
         commandDropDown.addValueObserver(selectedValue -> {
             CommandEntry entry = commands.get(selectedValue);
@@ -398,8 +403,6 @@ public class BitXExtension extends ControllerExtension {
                 showCommandDocumentation.set(entry.documentation);
             }
         });
-
-
 
         initializeTrackAndClipObservers(host);
 
@@ -480,12 +483,13 @@ public class BitXExtension extends ControllerExtension {
             if (channelFilterDeviceBanks[trackIndex] == null) {
                 channelFilterDeviceBanks[trackIndex] = track.createDeviceBank(16);
             }
-            channelFilterDeviceBanks[trackIndex].setDeviceMatcher(channelFilterDeviceMatcher);
+
+            channelFilterDeviceBanks[trackIndex].setDeviceMatcher(getHost().createBitwigDeviceMatcher(channelFilterUUID));
 
             for (int j = 0; j < channelFilterDeviceBanks[trackIndex].getSizeOfBank(); j++) {
                 Device device = channelFilterDeviceBanks[trackIndex].getDevice(j);
-                if (device == null) continue;
-
+                SpecificBitwigDevice specificChannelFilterDevice = device.createSpecificBitwigDevice(channelFilterUUID);
+                if (specificChannelFilterDevice == null) continue;
                 device.exists().addValueObserver(exists -> {
                     if (exists) {
                         channelFilterDevices.put(trackIndex, device);
@@ -498,7 +502,7 @@ public class BitXExtension extends ControllerExtension {
             if (noteFilterDeviceBanks[trackIndex] == null) {
                 noteFilterDeviceBanks[trackIndex] = track.createDeviceBank(16);
             }
-            noteFilterDeviceBanks[trackIndex].setDeviceMatcher(noteFilterDeviceMatcher);
+            noteFilterDeviceBanks[trackIndex].setDeviceMatcher(getHost().createBitwigDeviceMatcher(noteFilterUUID));
 
             for (int j = 0; j < noteFilterDeviceBanks[trackIndex].getSizeOfBank(); j++) {
                 Device device = noteFilterDeviceBanks[trackIndex].getDevice(j);
@@ -515,7 +519,7 @@ public class BitXExtension extends ControllerExtension {
             if (noteTransposeDeviceBanks[trackIndex] == null) {
                 noteTransposeDeviceBanks[trackIndex] = track.createDeviceBank(16);
             }
-            noteTransposeDeviceBanks[trackIndex].setDeviceMatcher(noteTransposeDeviceMatcher);
+            noteTransposeDeviceBanks[trackIndex].setDeviceMatcher(getHost().createBitwigDeviceMatcher(noteFilterUUID));
 
             for (int j = 0; j < noteTransposeDeviceBanks[trackIndex].getSizeOfBank(); j++) {
                 Device device = noteTransposeDeviceBanks[trackIndex].getDevice(j);
@@ -531,8 +535,24 @@ public class BitXExtension extends ControllerExtension {
 // Instrument Selector and layers setup
             
             trackLayerNames.put(trackIndex, new HashMap<>());
-            instrumentSelectordeviceBanks[trackIndex] = track.createDeviceBank(6);
-            Device device = instrumentSelectordeviceBanks[trackIndex].getDevice(5);
+            instrumentSelectordeviceBanks[trackIndex] = track.createDeviceBank(16);
+            int position = (int) instrumentSelectorPosition.getRaw();
+
+//            instrumentSelectordeviceBanks[trackIndex].setDeviceMatcher(getHost().createBitwigDeviceMatcher(instrumentSelectorUUID));
+//
+//            for (int j = 0; j < instrumentSelectordeviceBanks[trackIndex].getSizeOfBank(); j++) {
+//                Device device = instrumentSelectordeviceBanks[trackIndex].getDevice(j);
+//                if (device == null) continue;
+//
+//                device.exists().addValueObserver(exists -> {
+//                    if (exists) {
+//                        getHost().println("Found IS on track: " +trackIndex );
+//                       instrumentSelectorDevices.put(trackIndex, device);
+//                    }
+//                });
+//            }
+
+            Device device = instrumentSelectordeviceBanks[trackIndex].getDevice(position);
             layerBanks[trackIndex] = device.createLayerBank(maxLayers);
             chainSelectors[trackIndex] = device.createChainSelector();
 
@@ -566,8 +586,7 @@ public class BitXExtension extends ControllerExtension {
                 final int finalSlotIndex = slotIndex;
                 ClipLauncherSlot clipSlot = clipLauncherSlotBank.getItemAt(finalSlotIndex);
                 clipSlot.name().markInterested();
-
-
+                
                 clipLauncherSlotBank.addIsPlayingObserver((index, isPlaying) -> {
                     if (index == finalSlotIndex && isPlaying) {
                         String clipName = clipSlot.name().get();
