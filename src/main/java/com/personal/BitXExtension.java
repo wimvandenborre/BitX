@@ -586,7 +586,7 @@ public class BitXExtension extends ControllerExtension {
                 final int finalSlotIndex = slotIndex;
                 ClipLauncherSlot clipSlot = clipLauncherSlotBank.getItemAt(finalSlotIndex);
                 clipSlot.name().markInterested();
-                
+
                 clipLauncherSlotBank.addIsPlayingObserver((index, isPlaying) -> {
                     if (index == finalSlotIndex && isPlaying) {
                         String clipName = clipSlot.name().get();

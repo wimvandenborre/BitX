@@ -66,12 +66,8 @@ public class BitXGraphics {
         new Thread(() -> {
             try {
                 ProcessBuilder pb = new ProcessBuilder(
-                        "java",
-                        "--module-path", "/opt/javafx/lib",
-                        "--add-modules", "javafx.controls,javafx.graphics",
-                        "-jar",
-                        System.getProperty("user.home") + "/Documents/Bitwig Studio/Extensions/PerSonal/BitXDisplayApp.jar"
-
+                        "open",
+                        System.getProperty("user.home") + "/Documents/Bitwig Studio/Extensions/PerSonal/BitXDisplayApp.app"
                 ).inheritIO();
 
                 pb.redirectErrorStream(true);

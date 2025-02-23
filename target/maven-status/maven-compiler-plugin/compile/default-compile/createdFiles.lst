@@ -1,6 +1,7 @@
-com/personal/BitXExtension.class
+com/personal/BitXExtension$CommandEntry.class
 com/personal/BitXGraphics.class
 com/personal/BitXExtensionDefinition.class
-com/personal/BitXExtension$CommandWithArgument.class
 com/personal/BitXFunctions.class
 com/personal/BitXExtension$CommandExecutor.class
+com/personal/BitXExtension.class
+com/personal/BitXExtension$CommandWithArgument.class

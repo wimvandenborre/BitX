@@ -1,8 +1,8 @@
 This is the beginning of a Clyphx system for Bitwig
 
-If you don't want to compile and try it out just download the extension from the ${bitwig.extension.directory} directory. Unzip the whole folder into Bitwig Studio/Extensions
+If you don't want to compile and try it out just download the extension from the Download directory. Unzip the whole folder into Bitwig Studio/Extensions
 
-1) The displaywindow is now in JavaFX and runs only on mac silicon atm. Go to system settings security to allow the java window to run.
+1) The Displaywindow is now in JavaFX and runs only on mac silicon atm. The app is signed but if you experience issues go to system settings security to allow the app to run.
 
 2) On an instrument track put a drumrack on the second position. (put an fx selector for example before it)
 Now on that track write in a clipname ()LDR nameofyourdrumrackpreset
@@ -10,8 +10,7 @@ This will change the drumrack for that track
 
 3) Set the BPM with ()BPM 128 for example 60.04 (doubles work also)
 
-4) On an instrument track put an instrument selector on the second position (put an fx selector for example before it)
-  addd some presets that you create from plugins in the selector. Then in a clipname on that track use ()LIR nameofpreset -> This will load the requested preset.
+4) On an instrument track put an instrument selector on the position you've set in preferences (default 5)   addd some presets that you create from plugins in the selector. Then in a clipname on that track use ()LIR nameofpreset -> This will load the requested preset.
   You can also add a second argument pagenumber, this will select the remotes controls page of the device you loaded. use ":" as seperator. -> for example:
   ()LIR nameofpreset:5
 
