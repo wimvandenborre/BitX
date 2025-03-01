@@ -664,7 +664,7 @@ public class BitXExtension extends ControllerExtension {
     }
 
     private void openPatreonPage(final ControllerHost host) {
-        String patreonUrl = "https://per-sonal.com";
+        String patreonUrl = "https://patreon.com/CreatingSpaces";
         try {
             String[] command;
             if (host.platformIsWindows()) {
