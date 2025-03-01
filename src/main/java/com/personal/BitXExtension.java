@@ -115,20 +115,20 @@ public class BitXExtension extends ControllerExtension {
         tracknNumberSetting = prefs.getNumberSetting("Number of tracks", "Display", 1, 128, 1, "tracks", 32);
         sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 128);
         layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
-        displayWindowShowSetting = prefs.getBooleanSetting("Display Window", "Display", true);
+        displayWindowShowSetting = prefs.getBooleanSetting("Display Window", "Display", false);
 
         button_openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
         button_openPatreon.addSignalObserver(() -> openPatreonPage(host)); // ✅ Properly defined observer
 
-        Signal button_groovy = documentState.getSignalSetting(
-                "Groovy",
-                "NoteManipulation",
-                "grooveNotes"
-        );
-
-        button_groovy.addSignalObserver(() -> {
-            shiftNotesLeft(cursorClipLauncher);
-        });
+//        Signal button_groovy = documentState.getSignalSetting(
+//                "Groovy",
+//                "NoteManipulation",
+//                "grooveNotes"
+//        );
+//
+//        button_groovy.addSignalObserver(() -> {
+//            shiftNotesLeft(cursorClipLauncher);
+//        });
 
 
 //        int bitmapWidth = (int) widthSetting.getRaw();
@@ -325,7 +325,7 @@ public class BitXExtension extends ControllerExtension {
         cursorClipLauncher.scrollToKey(0);
 
         // Request the "Clip Type" setting once during init and store it.
-        clipTypeSetting = documentState.getEnumSetting("Clip Type", "Note Manipulation", new String[] { "Launcher", "Arranger" }, "Arranger");
+       // clipTypeSetting = documentState.getEnumSetting("Clip Type", "Note Manipulation", new String[] { "Launcher", "Arranger" }, "Arranger");
         
         initializeLayersAndDevices(MAX_LAYERS);
 
@@ -389,7 +389,7 @@ public class BitXExtension extends ControllerExtension {
                 "SPN: Show popup notification. Usage: SPN <message>."
         ));
 
-        SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "Command Documentation");
+        SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "BPM");
         String[] options = commands.keySet().toArray(new String[0]);
         Arrays.sort(options);  // Sorts alphabetically
         SettableEnumValue commandDropDown = documentState.getEnumSetting(
@@ -397,12 +397,12 @@ public class BitXExtension extends ControllerExtension {
         );
 
         commandDropDown.markInterested();
-        commandDropDown.addValueObserver(selectedValue -> {
-            CommandEntry entry = commands.get(selectedValue);
-            if (entry != null) {
-                showCommandDocumentation.set(entry.documentation);
-            }
-        });
+//        commandDropDown.addValueObserver(selectedValue -> {
+//            CommandEntry entry = commands.get(selectedValue);
+//            if (entry != null) {
+//                showCommandDocumentation.set(entry.documentation);
+//            }
+//        });
 
         initializeTrackAndClipObservers(host);
 
@@ -590,6 +590,8 @@ public class BitXExtension extends ControllerExtension {
                 clipLauncherSlotBank.addIsPlayingObserver((index, isPlaying) -> {
                     if (index == finalSlotIndex && isPlaying) {
                         String clipName = clipSlot.name().get();
+
+                
                         if (clipName != null && clipName.startsWith("()")) {
                             List<CommandWithArgument> commandsToExecute = parseCommands(clipName);
                             for (CommandWithArgument cmd : commandsToExecute) {
