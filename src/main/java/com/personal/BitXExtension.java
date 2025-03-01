@@ -389,20 +389,20 @@ public class BitXExtension extends ControllerExtension {
                 "SPN: Show popup notification. Usage: SPN <message>."
         ));
 
-        SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "BPM");
+        SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "SNF: Sets note filter. Usage: SNF <E2>:<D5>.");
         String[] options = commands.keySet().toArray(new String[0]);
         Arrays.sort(options);  // Sorts alphabetically
         SettableEnumValue commandDropDown = documentState.getEnumSetting(
-                "Command", "Commands", options, "BPM"
+                "Command", "Commands", options, "SNF"
         );
 
         commandDropDown.markInterested();
-//        commandDropDown.addValueObserver(selectedValue -> {
-//            CommandEntry entry = commands.get(selectedValue);
-//            if (entry != null) {
-//                showCommandDocumentation.set(entry.documentation);
-//            }
-//        });
+        commandDropDown.addValueObserver(selectedValue -> {
+            CommandEntry entry = commands.get(selectedValue);
+            if (entry != null) {
+                showCommandDocumentation.set(entry.documentation);
+            }
+        });
 
         initializeTrackAndClipObservers(host);
 
@@ -479,22 +479,22 @@ public class BitXExtension extends ControllerExtension {
             trackLayerNames.put(trackIndex, new HashMap<>());
             Track track = trackBank.getItemAt(trackIndex);
 
-            if (trackIndex == 0)
-            {
-                DeviceBank v8TestBank = track.createDeviceBank(5);
-                Device v8 = v8TestBank.getDevice(0);
-                v8TestBank.setDeviceMatcher(getHost().createBitwigDeviceMatcher(UUID.fromString("b13d3937-6002-4e88-8e50-e99119708072")));
-                SpecificBitwigDevice crashDevice = v8.createSpecificBitwigDevice(UUID.fromString("b13d3937-6002-4e88-8e50-e99119708072"));
-                Parameter tune = crashDevice.createParameter("TUNE");
-                tune.name().markInterested();
-                tune.value().markInterested();
-                //CursorRemoteControlsPage cRCP = v8.createCursorRemoteControlsPage(8);
-                //cRCP.createPresetPage();
-               // Parameter tune =  v8.createCursorRemoteControlsPage("Main",8,"Main").getParameter(1);
-                tune.set(0.8);
-                getHost().println("name " + tune.name().get() + " value " + tune.value().get());
-
-            }
+//            if (trackIndex == 0)
+//            {
+//                DeviceBank v8TestBank = track.createDeviceBank(5);
+//                Device v8 = v8TestBank.getDevice(0);
+//                v8TestBank.setDeviceMatcher(getHost().createBitwigDeviceMatcher(UUID.fromString("b13d3937-6002-4e88-8e50-e99119708072")));
+//                SpecificBitwigDevice crashDevice = v8.createSpecificBitwigDevice(UUID.fromString("b13d3937-6002-4e88-8e50-e99119708072"));
+//                Parameter tune = crashDevice.createParameter("TUNE");
+//                tune.name().markInterested();
+//                tune.value().markInterested();
+//                //CursorRemoteControlsPage cRCP = v8.createCursorRemoteControlsPage(8);
+//                //cRCP.createPresetPage();
+//               // Parameter tune =  v8.createCursorRemoteControlsPage("Main",8,"Main").getParameter(1);
+//                tune.set(0.8);
+//                getHost().println("name " + tune.name().get() + " value " + tune.value().get());
+//
+//            }
             //channelFilter
             if (channelFilterDeviceBanks[trackIndex] == null) {
                 channelFilterDeviceBanks[trackIndex] = track.createDeviceBank(16);
