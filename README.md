@@ -17,6 +17,8 @@ This will change the drumrack for that track
 6) Multiple commands per line are now possible: ()BPM 120 ()SMW Hello World ()SPN Notification Message
 
 7) Channel filter, Note range and Note Transpose commands are availabe, see below
+
+8) OSC from clipnames :)
   
 Available commands at this time:
 
@@ -36,3 +38,5 @@ Available commands at this time:
 ()SNF D1:E5 ->  Set Note Filter -> Change the key range for the note filter device.
 
 ()SNT octave:coarse:fine -> Set Note Transpose -> for example: ()SNT 2:30:-40
+
+()OSC Sends an OSC message. Usage: ()OSC /address arg1 arg2 ..."

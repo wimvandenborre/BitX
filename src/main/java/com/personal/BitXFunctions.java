@@ -74,7 +74,7 @@ public class BitXFunctions {
         OscModule oscModule = host.getOscModule();
         oscSender = oscModule.connectToUdpServer(oscIp, oscPort, null);
     }
-    
+
     public void sendOSCMessage(String arg) {
         if (arg.isEmpty()) {
             host.println("OSC command requires an address and arguments.");
