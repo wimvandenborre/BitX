@@ -6,8 +6,11 @@ import com.bitwig.extension.controller.api.DeviceBank;
 import com.bitwig.extension.controller.api.DeviceLayerBank;
 import com.bitwig.extension.controller.api.InsertionPoint;
 import com.bitwig.extension.controller.api.Transport;
+import com.bitwig.extension.api.opensoundcontrol.OscModule;
+import com.bitwig.extension.api.opensoundcontrol.OscConnection;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
@@ -18,6 +21,9 @@ import java.util.Map;
 
 public class BitXFunctions {
     private final ControllerHost host;
+    private OscConnection oscSender;
+    private String oscIp;
+    private int oscPort;
     private final Transport transport;
     private final String drumPresetsPath;
     private final DeviceBank[] deviceBanks;
@@ -40,7 +46,11 @@ public class BitXFunctions {
                          DeviceBank[][] layerDeviceBanks,
                          Map<Integer, Map<String, Integer>> trackLayerNames,
                          CursorRemoteControlsPage[][] cursorRemoteControlsPages,
-                         Map<Integer, List<Parameter>> trackChannelFilterParameters, Map<Integer, List<Parameter>> trackNoteFilterParameters, Map<Integer, List<Parameter>> trackNoteTransposeParameters) { // ✅ Add this
+                         Map<Integer, List<Parameter>> trackChannelFilterParameters,
+                         Map<Integer, List<Parameter>> trackNoteFilterParameters,
+                         Map<Integer, List<Parameter>> trackNoteTransposeParameters,
+                         String oscIp, int oscPort
+                         ) {
         this.host = host;
         this.transport = transport;
         this.drumPresetsPath = drumPresetsPath;
@@ -51,9 +61,58 @@ public class BitXFunctions {
         this.trackLayerNames = trackLayerNames;
         this.cursorRemoteControlsPages = cursorRemoteControlsPages;
         this.trackChannelFilterParameters = trackChannelFilterParameters;
-        this.trackNoteFilterParameters = trackNoteFilterParameters;// ✅ Store it
+        this.trackNoteFilterParameters = trackNoteFilterParameters;//
         this.trackNoteTransposeParameters = trackNoteTransposeParameters;
+        this.oscIp = oscIp;
+        this.oscPort = oscPort;
+        reconnectOscSender();
     }
+
+    private void reconnectOscSender() {
+        host.println("Reconnecting OSC sender to " + oscIp + ":" + oscPort);
+
+        OscModule oscModule = host.getOscModule();
+        oscSender = oscModule.connectToUdpServer(oscIp, oscPort, null);
+    }
+    
+    public void sendOSCMessage(String arg) {
+        if (arg.isEmpty()) {
+            host.println("OSC command requires an address and arguments.");
+            return;
+        }
+
+        // Split arguments: First part = address, rest = parameters
+        String[] parts = arg.split(" ");
+        if (parts.length < 1) {
+            host.println("Invalid OSC command format.");
+            return;
+        }
+
+        String address = parts[0];
+        Object[] arguments = new Object[parts.length - 1];
+
+        // Convert numeric values
+        for (int i = 1; i < parts.length; i++) {
+            try {
+                arguments[i - 1] = Integer.parseInt(parts[i]); // Try integer first
+            } catch (NumberFormatException e1) {
+                try {
+                    arguments[i - 1] = Float.parseFloat(parts[i]); // Then float
+                } catch (NumberFormatException e2) {
+                    arguments[i - 1] = parts[i]; // Otherwise, keep as string
+                }
+            }
+        }
+
+        host.println("📡 Sending OSC to " + oscIp + ":" + oscPort + " → " + address + " " + java.util.Arrays.toString(arguments));
+
+        try {
+            oscSender.sendMessage(address, arguments);
+        } catch (IOException e) {
+            host.println("⚠️ Error sending OSC message: " + e.getMessage());
+        }
+    }
+
 
     private int midiNoteFromString(String note) {
         Map<String, Integer> noteMap = new HashMap<>();

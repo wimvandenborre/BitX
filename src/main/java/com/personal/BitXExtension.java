@@ -44,7 +44,8 @@ public class BitXExtension extends ControllerExtension {
 
     //Preference settings in control Panel
     private Preferences prefs;
-    private SettableRangedValue instrumentSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting;
+    private SettableStringValue oscSendIpSetting;
+    private SettableRangedValue instrumentSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting, oscSendPortSetting;
     private SettableBooleanValue displayWindowShowSetting;
     private Signal button_openPatreon;
     private Signal button_groovy;
@@ -116,7 +117,8 @@ public class BitXExtension extends ControllerExtension {
         sceneNumberSetting = prefs.getNumberSetting("Number of scenes", "Display", 1, 1024, 1, "scenes", 128);
         layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
         displayWindowShowSetting = prefs.getBooleanSetting("Display Window", "Display", false);
-
+        oscSendIpSetting = prefs.getStringSetting("Osc Send IP", "OSC", 15, "127.0.0.1");
+        oscSendPortSetting = prefs.getNumberSetting("Osc Send Port", "OSC", 1024, 65535, 1, "", 8000);
         button_openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
         button_openPatreon.addSignalObserver(() -> openPatreonPage(host)); // ✅ Properly defined observer
 
@@ -329,6 +331,13 @@ public class BitXExtension extends ControllerExtension {
         
         initializeLayersAndDevices(MAX_LAYERS);
 
+        String oscIp = oscSendIpSetting.get(); // Get stored IP value
+        int oscPort = (int) oscSendPortSetting.getRaw(); // Get stored port value
+
+        if (oscPort == 0) {
+            oscPort = 8000;
+        }
+
         // The command functions have been moved to the CommandFunctions class.
         BitXFunctions bitXFunctions = new BitXFunctions(
                 host,
@@ -343,7 +352,9 @@ public class BitXExtension extends ControllerExtension {
                 cursorRemoteControlsPages,
                 trackChannelFilterParameters,
                 trackNoteFilterParameters,
-                trackNoteTransposeParameters
+                trackNoteTransposeParameters,
+                oscIp,
+                oscPort
         );
 
         commands.put("BPM", new CommandEntry(
@@ -389,6 +400,11 @@ public class BitXExtension extends ControllerExtension {
                 "SPN: Show popup notification. Usage: SPN <message>."
         ));
 
+        commands.put("OSC", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.sendOSCMessage(arg),
+                "OSC: Sends an OSC message. Usage: ()OSC /address arg1 arg2 ..."
+        ));
+
         SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "SNF: Sets note filter. Usage: SNF <E2>:<D5>.");
         String[] options = commands.keySet().toArray(new String[0]);
         Arrays.sort(options);  // Sorts alphabetically
@@ -403,6 +419,7 @@ public class BitXExtension extends ControllerExtension {
                 showCommandDocumentation.set(entry.documentation);
             }
         });
+
 
         initializeTrackAndClipObservers(host);
 
