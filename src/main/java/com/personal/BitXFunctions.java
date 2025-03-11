@@ -8,6 +8,8 @@ import com.bitwig.extension.controller.api.InsertionPoint;
 import com.bitwig.extension.controller.api.Transport;
 import com.bitwig.extension.api.opensoundcontrol.OscModule;
 import com.bitwig.extension.api.opensoundcontrol.OscConnection;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,6 +37,7 @@ public class BitXFunctions {
     private final Map<Integer, List<Parameter>> trackChannelFilterParameters; // ✅ Now accessible
     private final Map<Integer, List<Parameter>> trackNoteFilterParameters;
     private final Map<Integer, List<Parameter>> trackNoteTransposeParameters;
+    private Timer bpmTransitionTimer;
 
     public BitXFunctions(ControllerHost host,
                          Transport transport,
@@ -104,12 +107,12 @@ public class BitXFunctions {
             }
         }
 
-        host.println("📡 Sending OSC to " + oscIp + ":" + oscPort + " → " + address + " " + java.util.Arrays.toString(arguments));
+        host.println("Sending OSC to " + oscIp + ":" + oscPort + " → " + address + " " + java.util.Arrays.toString(arguments));
 
         try {
             oscSender.sendMessage(address, arguments);
         } catch (IOException e) {
-            host.println("⚠️ Error sending OSC message: " + e.getMessage());
+            host.println("Error sending OSC message: " + e.getMessage());
         }
     }
 
@@ -178,13 +181,13 @@ public class BitXFunctions {
             return;
         }
 
-        // ✅ Reset all parameters to 0
+        //Reset all parameters to 0
         for (Parameter param : parameters) {
             param.set(0.0);
         }
         host.println("All channels disabled on Track " + trackIndex);
 
-        // ✅ Parse the argument and enable selected channels
+        //Parse the argument and enable selected channels
         String[] selectedChannels = arg.split(":");
         for (String channelStr : selectedChannels) {
             try {
@@ -325,29 +328,120 @@ public class BitXFunctions {
         //        myBitmap.setDisplayWindowTitle("Info");
         //        myBitmap.showDisplayWindow();
     }
+    public void setBpm(String bpmCommand) {
+        String[] parts = bpmCommand.split(":");
+        if (parts.length == 0 || parts.length > 2) {
+            host.println("Invalid BPM command. Usage: ()BPM <targetBPM>:<bars>");
+            return;
+        }
 
-    public void setBpm(String bpmString) {
         try {
-            double targetBpm = Double.parseDouble(bpmString); // Parse the target BPM from the argument
+            double targetBpm = Double.parseDouble(parts[0].trim()); // ✅ Target BPM
+            double transitionBars = (parts.length == 2) ? Double.parseDouble(parts[1].trim()) : 0; // ✅ Transition time (default: 0)
 
-            // Define the actual min and max BPM range in Bitwig
+            // Define min/max BPM range in Bitwig
             double minBpm = 20.0;
             double maxBpm = 666.0;
-
-            // Ensure target BPM is within the allowed range
             targetBpm = Math.max(minBpm, Math.min(maxBpm, targetBpm));
 
-            // Map target BPM to the normalized range [0.0, 1.0]
-            double targetNormalizedValue = (targetBpm - minBpm) / (maxBpm - minBpm);
+            // ✅ Correctly get **current BPM**
+            double currentBpm = transport.tempo().value().get() * (maxBpm - minBpm) + minBpm;
 
-            // Apply the normalized tempo value explicitly to allow both increase and decrease
-            transport.tempo().value().set(targetNormalizedValue);
+            // ✅ If only one argument, set BPM instantly
+            if (transitionBars <= 0) {
+                transport.tempo().value().set((targetBpm - minBpm) / (maxBpm - minBpm));
+                host.println("🎵 BPM instantly set to: " + targetBpm);
+                return;
+            }
 
-            host.println("BPM set to: " + targetBpm + " (Normalized: " + targetNormalizedValue + ")");
+            // ✅ Get **time signature** only if needed
+            int beatsPerBar = transport.timeSignature().numerator().get();
+            int denominator = transport.timeSignature().denominator().get();
+
+            // ✅ Convert beats per bar based on the denominator
+            double beatsPerWholeNote = 4.0 / denominator;
+            double adjustedBeatsPerBar = beatsPerBar * beatsPerWholeNote;
+
+            // ✅ Start gradual transition
+            smoothBpmTransition(currentBpm, targetBpm, transitionBars, adjustedBeatsPerBar, minBpm, maxBpm);
+
         } catch (NumberFormatException e) {
-            host.println("Invalid BPM value: " + bpmString);
+            host.println("Invalid BPM or bars value. Usage: ()BPM <targetBPM>:<bars>");
         }
     }
+
+    private void smoothBpmTransition(double startBpm, double endBpm, double bars, double beatsPerBar, double minBpm, double maxBpm) {
+        if (bpmTransitionTimer != null) {
+            bpmTransitionTimer.cancel();
+        }
+
+        bpmTransitionTimer = new Timer();
+
+        // ✅ Correct BPM transition time
+        double secondsPerBar = (60.0 / startBpm) * beatsPerBar;
+        double totalDurationSeconds = bars * secondsPerBar;
+
+        int steps = 100; // ✅ Keep 100 steps for smooth transition
+        double interval = Math.max(totalDurationSeconds / steps * 1000, 10); // ✅ Min 10ms per update
+        double bpmStep = Math.max((endBpm - startBpm) / steps, 0.01); // ✅ Min 0.01 BPM change per step
+
+        host.println("🔄 Gradually changing BPM from " + startBpm + " to " + endBpm +
+                " over " + bars + " bars (" + beatsPerBar + " adjusted beats/bar).");
+
+        TimerTask bpmTask = new TimerTask() {
+            int currentStep = 0;
+            double currentBpm = startBpm;
+
+            @Override
+            public void run() {
+                if (currentStep >= steps) {
+                    transport.tempo().value().set((endBpm - minBpm) / (maxBpm - minBpm)); // ✅ Normalize final BPM
+                    host.println("✅ BPM transition complete at " + endBpm);
+                    bpmTransitionTimer.cancel();
+                    return;
+                }
+
+                currentBpm += bpmStep;
+
+                // ✅ Normalize BPM before setting it (0.0 - 1.0)
+                double normalizedBpm = (currentBpm - minBpm) / (maxBpm - minBpm);
+                transport.tempo().value().set(normalizedBpm);
+
+                currentStep++;
+            }
+        };
+
+        bpmTransitionTimer.schedule(bpmTask, 0, (long) interval);
+    }
+
+    public void setTimeSignature(String arg) {
+        String[] parts = arg.split(":");
+        if (parts.length != 2) {
+            host.println("Invalid STS command format. Usage: ()STS <numerator>:<denominator>");
+            return;
+        }
+
+        try {
+            int numerator = Integer.parseInt(parts[0].trim()); // ✅ Extract numerator (beats per bar)
+            int denominator = Integer.parseInt(parts[1].trim()); // ✅ Extract denominator (note value)
+
+            // ✅ Valid time signature ranges (common in music)
+            if (numerator < 1 || numerator > 32 || denominator < 1 || (denominator & (denominator - 1)) != 0) {
+                host.println("Invalid time signature. Numerator: 1-32, Denominator: 1, 2, 4, 8, 16, 32.");
+                return;
+            }
+
+            // ✅ Set time signature in Bitwig
+            transport.timeSignature().numerator().set(numerator);
+            transport.timeSignature().denominator().set(denominator);
+
+            host.println("Time Signature set to: " + numerator + "/" + denominator);
+
+        } catch (NumberFormatException e) {
+            host.println("Invalid time signature format. Usage: ()STS <numerator>:<denominator>");
+        }
+    }
+
 
     public void executeLDRCommand(String presetName, int trackIndex) {
         String drumFile = Paths.get(drumPresetsPath, presetName + ".bwpreset").toString();

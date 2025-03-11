@@ -105,6 +105,7 @@ public class BitXExtension extends ControllerExtension {
         transport = host.createTransport();
         transport.tempo().value().addValueObserver(value -> {
         });
+        transport.timeSignature().markInterested();
 
         drumPresetsPath = Paths.get(System.getProperty("user.home"), "Documents", "Bitwig Studio", "Library", "Presets", "Drum Machine").toString();
 
@@ -404,6 +405,12 @@ public class BitXExtension extends ControllerExtension {
                 (arg, trackIndex) -> bitXFunctions.sendOSCMessage(arg),
                 "OSC: Sends an OSC message. Usage: ()OSC /address arg1 arg2 ..."
         ));
+
+        commands.put("STS", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.setTimeSignature(arg),
+                "STS: Sets the time signature. Usage: ()STS <numerator>:<denominator>."
+        ));
+
 
         SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "SNF: Sets note filter. Usage: SNF <E2>:<D5>.");
         String[] options = commands.keySet().toArray(new String[0]);
