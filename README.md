@@ -1,28 +1,14 @@
 This is the beginning of a Clyphx system for Bitwig
 
-If you don't want to compile and try it out just download the extension from the Download directory. Unzip the whole folder into Bitwig Studio/Extensions
+If you don't want to compile and try it out just download the extension from the Download me directory. Unzip the whole folder into Bitwig Studio/Extensions
 
-1) The Displaywindow is now in JavaFX and runs only on mac silicon atm. The app is signed but if you experience issues go to system settings security to allow the app to run.
+The Displaywindow is now in JavaFX and runs only on mac silicon atm. The app is signed but if you experience issues go to system settings security to allow the app to run.
 
-2) On an instrument track put a drumrack on the second position. (put an fx selector for example before it)
-Now on that track write in a clipname ()LDR nameofyourdrumrackpreset
-This will change the drumrack for that track
+Multiple commands per line are now possible: ()BPM 120 ()SMW Hello World ()SPN Notification Message
 
-3) Set the BPM with ()BPM 128 for example 60.04 (doubles work also)
-
-4) On an instrument track put an instrument selector on the position you've set in preferences (default 5)   addd some presets that you create from plugins in the selector. Then in a clipname on that track use ()LIR nameofpreset -> This will load the requested preset.
-  You can also add a second argument pagenumber, this will select the remotes controls page of the device you loaded. use ":" as seperator. -> for example:
-  ()LIR nameofpreset:5
-
-6) Multiple commands per line are now possible: ()BPM 120 ()SMW Hello World ()SPN Notification Message
-
-7) Channel filter, Note range and Note Transpose commands are availabe, see below
-
-8) OSC from clipnames :)
-  
 Available commands at this time:
 
-()BMP "bpm" -> changes the bpm
+()BPM "bpm" -> changes the bpm -> ()BPM 124:8 transitions to the bpm in number of bars
 
 ()SMW "message" -> Show Message Window -> displays a message in a popupwindow
 
@@ -30,6 +16,8 @@ Available commands at this time:
 
 ()LIR "presetname" -> Load Instrument Rack -> will select the preset in an instrument rack. This is a Bitwig preset you save from any plugin you want to use.
 ()LIR "presetname:5" -> the second parameter will select the remotes controls page of your selected device.
+
+    You can set the position of the the instrument rack in the preferences
 
 ()SPN "Message" -> Show a popup Message that dissapears after a few seconds
 
@@ -40,3 +28,5 @@ Available commands at this time:
 ()SNT octave:coarse:fine -> Set Note Transpose -> for example: ()SNT 2:30:-40
 
 ()OSC Sends an OSC message. Usage: ()OSC /address arg1 arg2 ..."
+
+()STS Set Time Signature ()STS 4:8
