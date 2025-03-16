@@ -91,6 +91,7 @@ public class BitXExtension extends ControllerExtension {
     private final Map<Integer, List<Parameter>> trackNoteTransposeParameters = new HashMap<>();
 
 
+
     protected BitXExtension(final BitXExtensionDefinition definition, final ControllerHost host) {
         super(definition, host);
 
@@ -106,6 +107,50 @@ public class BitXExtension extends ControllerExtension {
         transport.tempo().value().addValueObserver(value -> {
         });
         transport.timeSignature().markInterested();
+
+        Arranger arranger = host.createArranger();
+        CueMarkerBank cueMarkerBank = arranger.createCueMarkerBank(64);
+
+        for (int i = 0; i < cueMarkerBank.getSizeOfBank(); i++) {
+            CueMarker cueMarker = cueMarkerBank.getItemAt(i);
+            if (cueMarker != null) {
+                cueMarker.position().markInterested();
+                cueMarker.name().markInterested();
+            }
+        }
+
+        transport.getPosition().addValueObserver(beatTime -> {
+            for (int i = 0; i < cueMarkerBank.getSizeOfBank(); i++) {
+                CueMarker cueMarker = cueMarkerBank.getItemAt(i);
+
+                if (cueMarker != null) {
+                    double markerPosition = cueMarker.position().get();
+                    double currentPosition = beatTime;
+
+                    // Check if transport reaches the cue marker position
+                    if (Math.abs(currentPosition - markerPosition) < 0.1) {
+                        String markerName = cueMarker.name().get();
+                        //getHost().showPopupNotification("Cue Marker Afgespeeld: " + markerName);
+
+                        // Check if the name contains a command (starts with "()")
+                        if (markerName.startsWith("()")) {
+                            List<CommandWithArgument> commandsToExecute = parseCommands(markerName);
+
+                            for (CommandWithArgument cmd : commandsToExecute) {
+                                CommandEntry entry = commands.get(cmd.command);
+                                if (entry != null) {
+                                    entry.executor.execute(cmd.argument, 0); // Track index is not relevant here
+                                } else {
+                                    getHost().println("Unknown cue marker command: " + cmd.command);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+
 
         drumPresetsPath = Paths.get(System.getProperty("user.home"), "Documents", "Bitwig Studio", "Library", "Presets", "Drum Machine").toString();
 
@@ -184,6 +229,8 @@ public class BitXExtension extends ControllerExtension {
         masterTrack.color().addValueObserver((r, g, b) -> {
             bitXGraphics.sendDataToJavaFX("MASTER_COLOR:" + (int) (r * 255) + ":" + (int) (g * 255) + ":" + (int) (b * 255));
         });
+
+
 
         //  Mark volume values as "interested"
         for (int i = 0; i < 8; i++) {  // Only the first 8 tracks for faders
