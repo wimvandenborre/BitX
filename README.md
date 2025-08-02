@@ -2,7 +2,9 @@ This is the beginning of a Clyphx system for Bitwig
 
 If you don't want to compile and try it out just download the extension from the Download me directory. Unzip the whole folder into Bitwig Studio/Extensions
 
-The Displaywindow is now in JavaFX and runs only on mac silicon atm. The app is signed but if you experience issues go to system settings security to allow the app to run.
+The script works on Mac and Windows, just the display window works on mac silicon atm. The app is signed but if you experience issues go to system settings security to allow the app to run.
+
+
 
 Multiple commands per line are now possible: ()BPM 120 ()SMW Hello World ()SPN Notification Message
 
