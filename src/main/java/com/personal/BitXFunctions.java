@@ -1,15 +1,18 @@
 package com.personal;
+
 import com.bitwig.extension.controller.api.*;
 import com.bitwig.extension.controller.api.ChainSelector;
 import com.bitwig.extension.controller.api.Device;
 import com.bitwig.extension.controller.api.DeviceBank;
 import com.bitwig.extension.controller.api.DeviceLayerBank;
-import com.bitwig.extension.controller.api.InsertionPoint;
+import com.bitwig.extension.controller.api.ClipLauncherSlot;
+import com.bitwig.extension.controller.api.ClipLauncherSlotBank;
+import com.bitwig.extension.controller.api.SceneBank;
+import com.bitwig.extension.controller.api.Track;
+import com.bitwig.extension.controller.api.TrackBank;
 import com.bitwig.extension.controller.api.Transport;
 import com.bitwig.extension.api.opensoundcontrol.OscModule;
 import com.bitwig.extension.api.opensoundcontrol.OscConnection;
-import java.util.Timer;
-import java.util.TimerTask;
 
 import java.io.File;
 import java.io.IOException;
@@ -17,9 +20,7 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class BitXFunctions {
     private final ControllerHost host;
@@ -34,10 +35,17 @@ public class BitXFunctions {
     private final DeviceBank[][] layerDeviceBanks;
     private final Map<Integer, Map<String, Integer>> trackLayerNames;
     private final CursorRemoteControlsPage[][] cursorRemoteControlsPages;
-    private final Map<Integer, List<Parameter>> trackChannelFilterParameters; // ✅ Now accessible
+    private final Map<Integer, List<Parameter>> trackChannelFilterParameters;
     private final Map<Integer, List<Parameter>> trackNoteFilterParameters;
     private final Map<Integer, List<Parameter>> trackNoteTransposeParameters;
+    private final TrackBank trackBank;
+    private final SceneBank sceneBank;
+    private final int maxTracks;
+    private final int maxScenes;
+    private final Map<Integer, String> cachedTrackNames;
+    private final CursorTrack followCursorTrack;
     private Timer bpmTransitionTimer;
+    private final PinnableCursorClip launcherCursorClip;
 
     public BitXFunctions(ControllerHost host,
                          Transport transport,
@@ -52,8 +60,14 @@ public class BitXFunctions {
                          Map<Integer, List<Parameter>> trackChannelFilterParameters,
                          Map<Integer, List<Parameter>> trackNoteFilterParameters,
                          Map<Integer, List<Parameter>> trackNoteTransposeParameters,
-                         String oscIp, int oscPort
-                         ) {
+                         String oscIp,
+                         int oscPort,
+                         TrackBank trackBank,
+                         SceneBank sceneBank,
+                         int maxTracks,
+                         int maxScenes,
+                         Map<Integer, String> cachedTrackNames,
+                         CursorTrack followCursorTrack, PinnableCursorClip launcherCursorClip) {
         this.host = host;
         this.transport = transport;
         this.drumPresetsPath = drumPresetsPath;
@@ -64,16 +78,22 @@ public class BitXFunctions {
         this.trackLayerNames = trackLayerNames;
         this.cursorRemoteControlsPages = cursorRemoteControlsPages;
         this.trackChannelFilterParameters = trackChannelFilterParameters;
-        this.trackNoteFilterParameters = trackNoteFilterParameters;//
+        this.trackNoteFilterParameters = trackNoteFilterParameters;
         this.trackNoteTransposeParameters = trackNoteTransposeParameters;
         this.oscIp = oscIp;
         this.oscPort = oscPort;
+        this.trackBank = trackBank;
+        this.sceneBank = sceneBank;
+        this.maxTracks = maxTracks;
+        this.maxScenes = maxScenes;
+        this.cachedTrackNames = cachedTrackNames;
+        this.followCursorTrack = followCursorTrack;
+        this.launcherCursorClip = launcherCursorClip;
         reconnectOscSender();
     }
 
     private void reconnectOscSender() {
         host.println("Reconnecting OSC sender to " + oscIp + ":" + oscPort);
-
         OscModule oscModule = host.getOscModule();
         oscSender = oscModule.connectToUdpServer(oscIp, oscPort, null);
     }
@@ -84,7 +104,6 @@ public class BitXFunctions {
             return;
         }
 
-        // Split arguments: First part = address, rest = parameters
         String[] parts = arg.split(" ");
         if (parts.length < 1) {
             host.println("Invalid OSC command format.");
@@ -94,21 +113,19 @@ public class BitXFunctions {
         String address = parts[0];
         Object[] arguments = new Object[parts.length - 1];
 
-        // Convert numeric values
         for (int i = 1; i < parts.length; i++) {
             try {
-                arguments[i - 1] = Integer.parseInt(parts[i]); // Try integer first
+                arguments[i - 1] = Integer.parseInt(parts[i]);
             } catch (NumberFormatException e1) {
                 try {
-                    arguments[i - 1] = Float.parseFloat(parts[i]); // Then float
+                    arguments[i - 1] = Float.parseFloat(parts[i]);
                 } catch (NumberFormatException e2) {
-                    arguments[i - 1] = parts[i]; // Otherwise, keep as string
+                    arguments[i - 1] = parts[i];
                 }
             }
         }
 
-        host.println("Sending OSC to " + oscIp + ":" + oscPort + " → " + address + " " + java.util.Arrays.toString(arguments));
-
+        host.println("Sending OSC to " + oscIp + ":" + oscPort + " → " + address + " " + Arrays.toString(arguments));
         try {
             oscSender.sendMessage(address, arguments);
         } catch (IOException e) {
@@ -116,11 +133,9 @@ public class BitXFunctions {
         }
     }
 
-
     private int midiNoteFromString(String note) {
         Map<String, Integer> noteMap = new HashMap<>();
         String[] notes = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-
         for (int octave = -2; octave <= 8; octave++) {
             for (int i = 0; i < notes.length; i++) {
                 String key = notes[i] + octave;
@@ -128,12 +143,10 @@ public class BitXFunctions {
                 noteMap.put(key, midiNote);
             }
         }
-
         return noteMap.getOrDefault(note, -1);
     }
 
     public void setNoteFilter(String arg, int trackIndex) {
-
         String[] args = arg.split(":");
         if (args.length != 2) {
             host.println("Invalid CNF format. Use: CNF C-2:G8");
@@ -163,35 +176,28 @@ public class BitXFunctions {
 
         Parameter minKeyParam = noteFilterParams.get(0);
         Parameter maxKeyParam = noteFilterParams.get(1);
-
         minKeyParam.set(minNote / 127.0);
         maxKeyParam.set(maxNote / 127.0);
-
-
         host.println("Set Note Filter: MIN_KEY=" + minNote + " MAX_KEY=" + maxNote + " on Track " + trackIndex);
     }
 
-
     public void setChannelFilter(String arg, int trackIndex) {
         host.println("Setting Channel Filter for Track " + trackIndex + " with args: " + arg);
-
         List<Parameter> parameters = trackChannelFilterParameters.get(trackIndex);
         if (parameters == null || parameters.isEmpty()) {
             host.println("No channel filter parameters found for Track " + trackIndex);
             return;
         }
 
-        //Reset all parameters to 0
         for (Parameter param : parameters) {
             param.set(0.0);
         }
         host.println("All channels disabled on Track " + trackIndex);
 
-        //Parse the argument and enable selected channels
         String[] selectedChannels = arg.split(":");
         for (String channelStr : selectedChannels) {
             try {
-                int channelIndex = Integer.parseInt(channelStr.trim()) - 1; // Convert to zero-based index
+                int channelIndex = Integer.parseInt(channelStr.trim()) - 1;
                 if (channelIndex >= 0 && channelIndex < parameters.size()) {
                     parameters.get(channelIndex).set(1.0);
                     host.println("Enabled SELECT_CHANNEL_" + (channelIndex + 1) + " on Track " + trackIndex);
@@ -209,29 +215,19 @@ public class BitXFunctions {
     public void setNoteTranspose(String arg, int trackIndex) {
         host.println("Changing Note Transpose on Track " + trackIndex + " with args: " + arg);
 
-        // Split the argument by colon.
         String[] parts = arg.split(":");
-
-        double octave = 0.0;
-        double coarse = 0.0;
-        double fine = 0.0;
+        double octave = 0.0, coarse = 0.0, fine = 0.0;
 
         try {
             if (parts.length == 3) {
-                // Format: <octave>:<coarse>:<fine>
                 octave = Double.parseDouble(parts[0].trim());
                 coarse = Double.parseDouble(parts[1].trim());
                 fine = Double.parseDouble(parts[2].trim());
             } else if (parts.length == 2) {
-                // Format: <octave>:<coarse>, fine defaults to 0.
                 octave = Double.parseDouble(parts[0].trim());
                 coarse = Double.parseDouble(parts[1].trim());
-                fine = 0.0;
             } else if (parts.length == 1) {
-                // Only one value provided; treat it as a fine adjustment.
                 octave = Double.parseDouble(parts[0].trim());
-                coarse = 0.0;
-                fine = 0.0;
             } else {
                 host.println("Invalid transpose format. Use: CNF <octave>:<coarse>:<fine>");
                 return;
@@ -241,12 +237,11 @@ public class BitXFunctions {
             return;
         }
 
-        // Validate ranges.
         if (octave < -3 || octave > 3) {
             host.println("Octave value must be between -3 and +3.");
             return;
         }
-        if (coarse < - 48 || coarse > 48) {
+        if (coarse < -48 || coarse > 48) {
             host.println("Coarse value must be between -96 and +96.");
             return;
         }
@@ -255,37 +250,25 @@ public class BitXFunctions {
             return;
         }
 
-        // Normalize values (assuming parameters expect a normalized value between 0 and 1 with center at 0.5):
-        double normalizedOctave = (3 - octave) / 6.0;      // Range: -3 -> 0, +3 -> 1
-        double normalizedCoarse = (coarse + 48) / 96.0;      // Range: -96 -> 0, +96 -> 1
-        double normalizedFine   = (fine + 100) / 200.0;       // Range: -200 -> 0, +200 -> 1
+        double normalizedOctave = (3 - octave) / 6.0;
+        double normalizedCoarse = (coarse + 48) / 96.0;
+        double normalizedFine = (fine + 100) / 200.0;
 
-        // Retrieve the note transpose parameters for the track.
-        // (This map should have been initialized during driver init, and may contain 1 to 3 parameters.)
         List<Parameter> transposeParams = trackNoteTransposeParameters.get(trackIndex);
         if (transposeParams == null || transposeParams.isEmpty()) {
             host.println("No Note Transpose parameters found on Track " + trackIndex);
             return;
         }
 
-        // Now, update the parameters that exist.
-        // If three parameters are available, assume the order is: octave, coarse, fine.
-        // If only one parameter is available, update it with the fine value.
         if (transposeParams.size() >= 3) {
-            Parameter octaveParam = transposeParams.get(0);
-            Parameter coarseParam = transposeParams.get(1);
-            Parameter fineParam = transposeParams.get(2);
-            octaveParam.set(normalizedOctave);
-            coarseParam.set(normalizedCoarse);
-            fineParam.set(normalizedFine);
+            transposeParams.get(0).set(normalizedOctave);
+            transposeParams.get(1).set(normalizedCoarse);
+            transposeParams.get(2).set(normalizedFine);
         } else if (transposeParams.size() == 2) {
-            Parameter octaveParam = transposeParams.get(0);
-            Parameter coarseParam = transposeParams.get(1);
-            octaveParam.set(normalizedOctave);
-            coarseParam.set(normalizedCoarse);
-        } else { // Only one parameter available.
-            Parameter singleParam = transposeParams.get(0);
-            singleParam.set(normalizedOctave);
+            transposeParams.get(0).set(normalizedOctave);
+            transposeParams.get(1).set(normalizedCoarse);
+        } else {
+            transposeParams.get(0).set(normalizedOctave);
         }
 
         host.println("Set Note Transpose on Track " + trackIndex +
@@ -294,40 +277,10 @@ public class BitXFunctions {
                 "Fine=" + fine + " (norm: " + normalizedFine + ").");
     }
 
-
-
     public void displayTextInWindow(String text) {
-        sendDataToJavaFX("CLIP:" + text); // Send clip name
-
-        // private void displayTextInWindow(ControllerHost host, Bitmap myBitmap, String text)
-
-        //        final int width = myBitmap.getWidth();
-        //        final int height = myBitmap.getHeight();
-        //
-        //        // 1) Render the bitmap's contents
-        //        myBitmap.render(graphicsOutput -> {
-        //            graphicsOutput.save();
-        //            try {
-        //                graphicsOutput.setOperator(GraphicsOutput.Operator.SOURCE);
-        //                graphicsOutput.setColor(1.0, 0.0, 0.0, 1.0); // Bright red background
-        //                graphicsOutput.rectangle(0, 0, width, height);
-        //                graphicsOutput.fill();
-        //                graphicsOutput.setFontSize(80.0);
-        //
-        //                // Set a color for the text (yellowish)
-        //                graphicsOutput.setColor(0.9, 1.0, 0.0, 1.0);
-        //                graphicsOutput.moveTo(10, 60);
-        //                graphicsOutput.showText(text);
-        //
-        //
-        //            } finally {
-        //                graphicsOutput.restore();
-        //            }
-        //        });
-        //
-        //        myBitmap.setDisplayWindowTitle("Info");
-        //        myBitmap.showDisplayWindow();
+        sendDataToJavaFX("CLIP:" + text);
     }
+
     public void setBpm(String bpmCommand) {
         String[] parts = bpmCommand.split(":");
         if (parts.length == 0 || parts.length > 2) {
@@ -336,35 +289,28 @@ public class BitXFunctions {
         }
 
         try {
-            double targetBpm = Double.parseDouble(parts[0].trim()); // ✅ Target BPM
-            double transitionBars = (parts.length == 2) ? Double.parseDouble(parts[1].trim()) : 0; // ✅ Transition time (default: 0)
+            double targetBpm = Double.parseDouble(parts[0].trim());
+            double transitionBars = (parts.length == 2) ? Double.parseDouble(parts[1].trim()) : 0;
 
-            // Define min/max BPM range in Bitwig
             double minBpm = 20.0;
             double maxBpm = 666.0;
             targetBpm = Math.max(minBpm, Math.min(maxBpm, targetBpm));
 
-            // ✅ Correctly get **current BPM**
             double currentBpm = transport.tempo().value().get() * (maxBpm - minBpm) + minBpm;
 
-            // ✅ If only one argument, set BPM instantly
             if (transitionBars <= 0) {
                 transport.tempo().value().set((targetBpm - minBpm) / (maxBpm - minBpm));
                 host.println("🎵 BPM instantly set to: " + targetBpm);
                 return;
             }
 
-            // ✅ Get **time signature** only if needed
             int beatsPerBar = transport.timeSignature().numerator().get();
             int denominator = transport.timeSignature().denominator().get();
 
-            // ✅ Convert beats per bar based on the denominator
             double beatsPerWholeNote = 4.0 / denominator;
             double adjustedBeatsPerBar = beatsPerBar * beatsPerWholeNote;
 
-            // ✅ Start gradual transition
             smoothBpmTransition(currentBpm, targetBpm, transitionBars, adjustedBeatsPerBar, minBpm, maxBpm);
-
         } catch (NumberFormatException e) {
             host.println("Invalid BPM or bars value. Usage: ()BPM <targetBPM>:<bars>");
         }
@@ -376,14 +322,12 @@ public class BitXFunctions {
         }
 
         bpmTransitionTimer = new Timer();
-
-        // ✅ Correct BPM transition time
         double secondsPerBar = (60.0 / startBpm) * beatsPerBar;
         double totalDurationSeconds = bars * secondsPerBar;
 
-        int steps = 100; // ✅ Keep 100 steps for smooth transition
-        double interval = Math.max(totalDurationSeconds / steps * 1000, 10); // ✅ Min 10ms per update
-        double bpmStep = Math.max((endBpm - startBpm) / steps, 0.01); // ✅ Min 0.01 BPM change per step
+        int steps = 100;
+        double interval = Math.max(totalDurationSeconds / steps * 1000, 10);
+        double bpmStep = Math.max((endBpm - startBpm) / steps, 0.01);
 
         host.println("🔄 Gradually changing BPM from " + startBpm + " to " + endBpm +
                 " over " + bars + " bars (" + beatsPerBar + " adjusted beats/bar).");
@@ -395,18 +339,15 @@ public class BitXFunctions {
             @Override
             public void run() {
                 if (currentStep >= steps) {
-                    transport.tempo().value().set((endBpm - minBpm) / (maxBpm - minBpm)); // ✅ Normalize final BPM
+                    transport.tempo().value().set((endBpm - minBpm) / (maxBpm - minBpm));
                     host.println("✅ BPM transition complete at " + endBpm);
                     bpmTransitionTimer.cancel();
                     return;
                 }
 
                 currentBpm += bpmStep;
-
-                // ✅ Normalize BPM before setting it (0.0 - 1.0)
                 double normalizedBpm = (currentBpm - minBpm) / (maxBpm - minBpm);
                 transport.tempo().value().set(normalizedBpm);
-
                 currentStep++;
             }
         };
@@ -422,31 +363,25 @@ public class BitXFunctions {
         }
 
         try {
-            int numerator = Integer.parseInt(parts[0].trim()); // ✅ Extract numerator (beats per bar)
-            int denominator = Integer.parseInt(parts[1].trim()); // ✅ Extract denominator (note value)
+            int numerator = Integer.parseInt(parts[0].trim());
+            int denominator = Integer.parseInt(parts[1].trim());
 
-            // ✅ Valid time signature ranges (common in music)
             if (numerator < 1 || numerator > 32 || denominator < 1 || (denominator & (denominator - 1)) != 0) {
-                host.println("Invalid time signature. Numerator: 1-32, Denominator: 1, 2, 4, 8, 16, 32.");
+                host.println("Invalid time signature. Numerator: 1-32, Denominator: 1,2,4,8,16,32.");
                 return;
             }
 
-            // ✅ Set time signature in Bitwig
             transport.timeSignature().numerator().set(numerator);
             transport.timeSignature().denominator().set(denominator);
-
             host.println("Time Signature set to: " + numerator + "/" + denominator);
-
         } catch (NumberFormatException e) {
             host.println("Invalid time signature format. Usage: ()STS <numerator>:<denominator>");
         }
     }
 
-
     public void executeLDRCommand(String presetName, int trackIndex) {
         String drumFile = Paths.get(drumPresetsPath, presetName + ".bwpreset").toString();
         host.println("Loading preset file: " + drumFile);
-
         File file = new File(drumFile);
         if (!file.exists()) {
             host.println("Error: Preset file does not exist: " + drumFile);
@@ -473,8 +408,6 @@ public class BitXFunctions {
     public void selectInstrumentInLayer(String commandArgs, int trackIndex) {
         String[] parts = commandArgs.split(":");
         String instrumentName = parts[0].trim();
-
-        // Validate and adjust the page number (User inputs 1-based, so we subtract 1)
         int remotePageIndex = (parts.length > 1) ? validatePageNumber(parts[1].trim()) - 1 : -1;
 
         ChainSelector selector = chainSelectors[trackIndex];
@@ -490,21 +423,17 @@ public class BitXFunctions {
             selector.activeChainIndex().set(layerIndex);
             layerBank.getItemAt(layerIndex).selectInEditor();
 
-            // Select the device in the selected layer
             Device deviceForSelectedLayer = layerDeviceBanks[trackIndex][layerIndex].getDevice(0);
             if (deviceForSelectedLayer != null) {
                 deviceForSelectedLayer.selectInEditor();
                 host.println("Instrument layer selected: " + instrumentName);
 
-                //Use pre-initialized CursorRemoteControlsPage
                 CursorRemoteControlsPage cursorPage = cursorRemoteControlsPages[trackIndex][layerIndex];
-
                 if (cursorPage != null && remotePageIndex >= 0) {
-                    int totalPages = cursorPage.pageCount().get(); //Safe to access
-
+                    int totalPages = cursorPage.pageCount().get();
                     if (remotePageIndex < totalPages) {
                         cursorPage.selectedPageIndex().set(remotePageIndex);
-                        host.println("Remote Controls Page selected: " + (remotePageIndex + 1)); // Show 1-based page number
+                        host.println("Remote Controls Page selected: " + (remotePageIndex + 1));
                     } else {
                         host.println("⚠Error: Remote Controls Page " + (remotePageIndex + 1) + " does not exist.");
                     }
@@ -521,7 +450,6 @@ public class BitXFunctions {
         host.showPopupNotification(text);
     }
 
-    // Helper method to send data to the JavaFX display application.
     private void sendDataToJavaFX(String message) {
         try (Socket socket = new Socket("127.0.0.1", 9876);
              OutputStream outputStream = socket.getOutputStream();
@@ -532,16 +460,83 @@ public class BitXFunctions {
         }
     }
 
+    public void jumpToClipLauncherRectangleByName(String arg) {
+        String[] parts = arg.split(":", 2);
+        if (parts.length != 2) {
+            host.println("Invalid JUMPTO format. Use: ()JUMPTO <trackName>:<clipName>");
+            return;
+        }
+        String targetTrackName = parts[0].trim();
+        String targetClipName = parts[1].trim();
+
+        int trackIndex = -1;
+        for (Map.Entry<Integer, String> e : cachedTrackNames.entrySet()) {
+            if (e.getValue() != null && e.getValue().equalsIgnoreCase(targetTrackName)) {
+                trackIndex = e.getKey();
+                break;
+            }
+        }
+        if (trackIndex == -1) {
+            host.println("Track not found: " + targetTrackName);
+            return;
+        }
+
+        Track track = trackBank.getItemAt(trackIndex);
+        if (track == null) {
+            host.println("Track is null at index: " + trackIndex);
+            return;
+        }
+
+        ClipLauncherSlotBank slotBank = track.clipLauncherSlotBank();
+        int foundScene = -1;
+        for (int s = 0; s < maxScenes; s++) {
+            ClipLauncherSlot slot = slotBank.getItemAt(s);
+            String clipName = slot.name().get();
+            if (clipName != null && clipName.equalsIgnoreCase(targetClipName)) {
+                foundScene = s;
+                break;
+            }
+        }
+        if (foundScene == -1) {
+            host.println("Clip not found: " + targetClipName + " on track " + targetTrackName);
+            return;
+        }
+
+        // Move the focus rectangle by selecting the slot
+
+
+
+
+        int sceneWindowSize = sceneBank.getSizeOfBank();
+        int scenePage  = foundScene / sceneWindowSize;
+        int sceneSlot  = foundScene % sceneWindowSize;
+        sceneBank.setIndication(true);
+        sceneBank.scrollByPages(scenePage);
+        sceneBank.scrollBy(sceneSlot);
+        sceneBank.scrollIntoView(foundScene);
+        sceneBank.getScene(foundScene);
+
+        track.selectInMixer();
+        track.selectInEditor();
+        slotBank.getItemAt(foundScene).select();
+        slotBank.getItemAt(foundScene).showInEditor();
+
+
+        // sceneBank.scrollByPages(5);
+
+
+        host.showPopupNotification("Jumped to \"" + targetTrackName + "\" / \"" + targetClipName + "\"");
+    }
+
+
 
     private int validatePageNumber(String input) {
         try {
             int pageNumber = Integer.parseInt(input.trim());
-            return Math.max(pageNumber, 1); // Ensure it's at least 1
+            return Math.max(pageNumber, 1);
         } catch (NumberFormatException e) {
             host.println("⚠️ Invalid page number input: " + input + ". Defaulting to page 1.");
-            return 1; // Default to first page
+            return 1;
         }
     }
-
-
 }

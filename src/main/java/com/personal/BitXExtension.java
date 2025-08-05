@@ -13,6 +13,9 @@ public class BitXExtension extends ControllerExtension {
     private static int MAX_LAYERS = 32;
 
     private TrackBank trackBank;
+    private SceneBank sceneBank;
+
+
     // private Bitmap textWindowBitmap;
     private String drumPresetsPath;
     private Transport transport;
@@ -34,6 +37,10 @@ public class BitXExtension extends ControllerExtension {
 
     private Clip cursorClipArranger;
     private Clip cursorClipLauncher;
+
+    private PinnableCursorClip launcherCursorClip;
+
+    private CursorTrack followCursorTrack;
 
     // We store the "Clip Type" setting during initialization.
     private SettableEnumValue clipTypeSetting;
@@ -89,6 +96,8 @@ public class BitXExtension extends ControllerExtension {
     private final Map<Integer, SpecificBitwigDevice> specificNoteTransposeDevices = new HashMap<>();
     private DeviceMatcher noteTransposeDeviceMatcher;
     private final Map<Integer, List<Parameter>> trackNoteTransposeParameters = new HashMap<>();
+
+    private final Map<Integer, String> cachedTrackNames = new HashMap<>();
 
 
 
@@ -168,6 +177,9 @@ public class BitXExtension extends ControllerExtension {
         button_openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
         button_openPatreon.addSignalObserver(() -> openPatreonPage(host)); // ✅ Properly defined observer
 
+        // in init(), after getting host:
+        followCursorTrack = host.createCursorTrack("FollowTrack", "Jump Follow", 0, 0, true);
+
 //        Signal button_groovy = documentState.getSignalSetting(
 //                "Groovy",
 //                "NoteManipulation",
@@ -200,6 +212,10 @@ public class BitXExtension extends ControllerExtension {
         layerDeviceBanks = new DeviceBank[MAX_TRACKS][MAX_LAYERS];
         //textWindowBitmap = host.createBitmap(bitmapWidth, bitmapHeight, BitmapFormat.ARGB32);
         trackBank = host.createTrackBank(MAX_TRACKS, 0, MAX_SCENES, true);
+        sceneBank = host.createSceneBank(MAX_SCENES);
+
+
+
         // Initialize BitXGraphics instance for JavaFX communication
 
         // Display App init
@@ -252,6 +268,8 @@ public class BitXExtension extends ControllerExtension {
         CursorTrack cursorTrack = host.createCursorTrack("RemoteControlsTrack", "Selected Track", 0, 0, true);
         PinnableCursorDevice cursorDevice = cursorTrack.createCursorDevice("RemoteControlsDevice", "Selected Device", 0, CursorDeviceFollowMode.FOLLOW_SELECTION);
         // Create a RemoteControlsPage for the selected device
+
+        launcherCursorClip = cursorTrack.createLauncherCursorClip(16 * 8, 128);
         cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
 
         cursorRemoteControlsPages = new CursorRemoteControlsPage[MAX_TRACKS][MAX_LAYERS];
@@ -356,6 +374,7 @@ public class BitXExtension extends ControllerExtension {
 
             trackNoteTransposeParameters.put(i, noteTransposeParams);
 
+
         }
 
         //Nudging the groove
@@ -402,7 +421,14 @@ public class BitXExtension extends ControllerExtension {
                 trackNoteFilterParameters,
                 trackNoteTransposeParameters,
                 oscIp,
-                oscPort
+                oscPort,
+                trackBank,
+                sceneBank,
+                MAX_TRACKS,
+                MAX_SCENES,
+                cachedTrackNames,
+                followCursorTrack,
+                launcherCursorClip
         );
 
         commands.put("BPM", new CommandEntry(
@@ -456,6 +482,11 @@ public class BitXExtension extends ControllerExtension {
         commands.put("STS", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.setTimeSignature(arg),
                 "STS: Sets the time signature. Usage: ()STS <numerator>:<denominator>."
+        ));
+
+        commands.put("JUMPTO", new CommandEntry(
+                (arg, trackIndex) -> bitXFunctions.jumpToClipLauncherRectangleByName(arg),
+                "JUMPTO: Move focus rectangle by track name and clip name. Usage: ()JUMPTO <trackName>:<clipName>."
         ));
 
 
@@ -666,7 +697,13 @@ public class BitXExtension extends ControllerExtension {
     private void initializeTrackAndClipObservers(final ControllerHost host) {
         for (int i = 0; i < MAX_TRACKS; i++) {
             final int trackIndex = i;
+
+            // For the jump-by-name feature: cache track name
             Track track = trackBank.getItemAt(trackIndex);
+
+            track.name().markInterested();
+
+            track.name().addValueObserver(name -> cachedTrackNames.put(trackIndex, name));
             ClipLauncherSlotBank clipLauncherSlotBank = track.clipLauncherSlotBank();
 
             for (int slotIndex = 0; slotIndex < MAX_SCENES; slotIndex++) {
