@@ -1,16 +1,6 @@
 package com.personal;
 
 import com.bitwig.extension.controller.api.*;
-import com.bitwig.extension.controller.api.ChainSelector;
-import com.bitwig.extension.controller.api.Device;
-import com.bitwig.extension.controller.api.DeviceBank;
-import com.bitwig.extension.controller.api.DeviceLayerBank;
-import com.bitwig.extension.controller.api.ClipLauncherSlot;
-import com.bitwig.extension.controller.api.ClipLauncherSlotBank;
-import com.bitwig.extension.controller.api.SceneBank;
-import com.bitwig.extension.controller.api.Track;
-import com.bitwig.extension.controller.api.TrackBank;
-import com.bitwig.extension.controller.api.Transport;
 import com.bitwig.extension.api.opensoundcontrol.OscModule;
 import com.bitwig.extension.api.opensoundcontrol.OscConnection;
 
@@ -29,23 +19,37 @@ public class BitXFunctions {
     private int oscPort;
     private final Transport transport;
     private final String drumPresetsPath;
+
     private final DeviceBank[] deviceBanks;
     private final DeviceLayerBank[] layerBanks;
     private final ChainSelector[] chainSelectors;
     private final DeviceBank[][] layerDeviceBanks;
+
+    // FX Selector
+    private final DeviceLayerBank[] fxLayerBanks;
+    private final ChainSelector[] fxChainSelectors;
+    private final DeviceBank[][] fxLayerDeviceBanks;
+
     private final Map<Integer, Map<String, Integer>> trackLayerNames;
+    private final Map<Integer, Map<String, Integer>> fxTrackLayerNames;
+
     private final CursorRemoteControlsPage[][] cursorRemoteControlsPages;
+    private final CursorRemoteControlsPage[][] fxCursorRemoteControlsPages;
+
     private final Map<Integer, List<Parameter>> trackChannelFilterParameters;
     private final Map<Integer, List<Parameter>> trackNoteFilterParameters;
     private final Map<Integer, List<Parameter>> trackNoteTransposeParameters;
+    private final Map<Integer, List<Parameter>> mpcParameters;
+
     private final TrackBank trackBank;
     private final SceneBank sceneBank;
     private final int maxTracks;
     private final int maxScenes;
     private final Map<Integer, String> cachedTrackNames;
     private final CursorTrack followCursorTrack;
-    private Timer bpmTransitionTimer;
     private final PinnableCursorClip launcherCursorClip;
+
+    private Timer bpmTransitionTimer;
 
     public BitXFunctions(ControllerHost host,
                          Transport transport,
@@ -55,11 +59,17 @@ public class BitXFunctions {
                          DeviceLayerBank[] layerBanks,
                          ChainSelector[] chainSelectors,
                          DeviceBank[][] layerDeviceBanks,
+                         DeviceLayerBank[] fxLayerBanks,
+                         ChainSelector[] fxChainSelectors,
+                         DeviceBank[][] fxLayerDeviceBanks,
                          Map<Integer, Map<String, Integer>> trackLayerNames,
+                         Map<Integer, Map<String, Integer>> fxTrackLayerNames,
                          CursorRemoteControlsPage[][] cursorRemoteControlsPages,
+                         CursorRemoteControlsPage[][] fxCursorRemoteControlsPages,
                          Map<Integer, List<Parameter>> trackChannelFilterParameters,
                          Map<Integer, List<Parameter>> trackNoteFilterParameters,
                          Map<Integer, List<Parameter>> trackNoteTransposeParameters,
+                         Map<Integer, List<Parameter>> mpcParameters,
                          String oscIp,
                          int oscPort,
                          TrackBank trackBank,
@@ -67,7 +77,9 @@ public class BitXFunctions {
                          int maxTracks,
                          int maxScenes,
                          Map<Integer, String> cachedTrackNames,
-                         CursorTrack followCursorTrack, PinnableCursorClip launcherCursorClip) {
+                         CursorTrack followCursorTrack,
+                         PinnableCursorClip launcherCursorClip) {
+
         this.host = host;
         this.transport = transport;
         this.drumPresetsPath = drumPresetsPath;
@@ -75,13 +87,25 @@ public class BitXFunctions {
         this.layerBanks = layerBanks;
         this.chainSelectors = chainSelectors;
         this.layerDeviceBanks = layerDeviceBanks;
+
+        this.fxLayerBanks = fxLayerBanks;
+        this.fxChainSelectors = fxChainSelectors;
+        this.fxLayerDeviceBanks = fxLayerDeviceBanks;
+
         this.trackLayerNames = trackLayerNames;
+        this.fxTrackLayerNames = fxTrackLayerNames;
+
         this.cursorRemoteControlsPages = cursorRemoteControlsPages;
+        this.fxCursorRemoteControlsPages = fxCursorRemoteControlsPages;
+
         this.trackChannelFilterParameters = trackChannelFilterParameters;
         this.trackNoteFilterParameters = trackNoteFilterParameters;
         this.trackNoteTransposeParameters = trackNoteTransposeParameters;
+        this.mpcParameters = mpcParameters;
+
         this.oscIp = oscIp;
         this.oscPort = oscPort;
+
         this.trackBank = trackBank;
         this.sceneBank = sceneBank;
         this.maxTracks = maxTracks;
@@ -89,6 +113,7 @@ public class BitXFunctions {
         this.cachedTrackNames = cachedTrackNames;
         this.followCursorTrack = followCursorTrack;
         this.launcherCursorClip = launcherCursorClip;
+
         reconnectOscSender();
     }
 
@@ -277,6 +302,133 @@ public class BitXFunctions {
                 "Fine=" + fine + " (norm: " + normalizedFine + ").");
     }
 
+    public void setMPC(String arg, int trackIndex) {
+        host.println("Setting MPC for Track " + trackIndex + " with args: " + arg);
+
+        List<Parameter> params = mpcParameters.get(trackIndex);
+        if (params == null || params.size() < 4) {
+            host.println("No MPC parameters found on Track " + trackIndex);
+            return;
+        }
+
+        Parameter programParam  = params.get(0);
+        Parameter bankMsbParam  = params.get(1);
+        Parameter bankLsbParam  = params.get(2);
+        Parameter channelParam  = params.get(3);
+
+        String[] parts = arg.split(":");
+
+        Integer program = null;
+        Integer bankMsb = null;
+        Integer bankLsb = null;
+        Integer channel = null;
+
+        try {
+            if (parts.length > 0 && !parts[0].trim().isEmpty() && !parts[0].trim().equals("*")) {
+                program = Integer.parseInt(parts[0].trim());
+            }
+            if (parts.length > 1 && !parts[1].trim().isEmpty() && !parts[1].trim().equals("*")) {
+                bankMsb = Integer.parseInt(parts[1].trim());
+            }
+            if (parts.length > 2 && !parts[2].trim().isEmpty() && !parts[2].trim().equals("*")) {
+                bankLsb = Integer.parseInt(parts[2].trim());
+            }
+            if (parts.length > 3 && !parts[3].trim().isEmpty() && !parts[3].trim().equals("*")) {
+                channel = Integer.parseInt(parts[3].trim());
+            }
+        } catch (NumberFormatException e) {
+            host.println("Invalid MPC number format in: " + arg + " (" + e.getMessage() + ")");
+            return;
+        }
+
+        // --- PROGRAM (1–128 expected)
+        if (program != null) {
+            int adj = program - 1;
+            if (adj < 0 || adj > 127) {
+                host.println("MPC PROGRAM out of range (1–128): " + program);
+            } else {
+                double norm = adj / 127.0;
+                programParam.setImmediately(norm);
+                host.println("MPC PROGRAM set to " + program + " (adj " + adj + ", norm " + norm + ")");
+            }
+        }
+
+        // --- BANK_MSB (1–128 expected)
+        if (bankMsb != null) {
+            int adj = bankMsb - 1;
+            if (adj < 0 || adj > 127) {
+                host.println("MPC BANK_MSB out of range (1–128): " + bankMsb);
+            } else {
+                double norm = adj / 127.0;
+                bankMsbParam.setImmediately(norm);
+                host.println("MPC BANK_MSB set to " + bankMsb + " (adj " + adj + ", norm " + norm + ")");
+            }
+        }
+
+        // --- BANK_LSB (1–128 expected)
+        if (bankLsb != null) {
+            int adj = bankLsb - 1;
+            if (adj < 0 || adj > 127) {
+                host.println("MPC BANK_LSB out of range (1–128): " + bankLsb);
+            } else {
+                double norm = adj / 127.0;
+                bankLsbParam.setImmediately(norm);
+                host.println("MPC BANK_LSB set to " + bankLsb + " (adj " + adj + ", norm " + norm + ")");
+            }
+        }
+
+        // --- CHANNEL (1–16 → 0–15)
+        if (channel != null) {
+            if (channel < 1 || channel > 16) {
+                host.println("MPC CHANNEL out of range (1–16): " + channel);
+            } else {
+                int zeroBased = channel - 1;
+                double norm = zeroBased / 15.0;
+                channelParam.setImmediately(norm);
+                host.println("MPC CHANNEL set to " + channel + " (zero-based " + zeroBased + ", norm " + norm + ")");
+            }
+        }
+    }
+
+    public void setMPCXD(String arg, int trackIndex) {
+        arg = arg.trim();
+        if (arg.isEmpty()) {
+            host.println("MPCXD: No slot provided. Usage: ()MPCXD <1-500>");
+            return;
+        }
+
+        int slot;
+        try {
+            slot = Integer.parseInt(arg);
+        } catch (NumberFormatException e) {
+            host.println("MPCXD: Invalid slot number: " + arg);
+            return;
+        }
+
+        if (slot < 1 || slot > 500) {
+            host.println("MPCXD: Slot out of range (1–500): " + slot);
+            return;
+        }
+
+        int zeroBased = slot - 1;
+        int subBank   = zeroBased / 100 + 1;
+        int pc        = zeroBased % 100;
+
+        int programArg  = pc + 1;
+        int bankMsbArg  = 1;
+        int bankLsbArg  = subBank;
+
+        String mpcArgs = programArg + ":" + bankMsbArg + ":" + bankLsbArg + ":*";
+
+        host.println("MPCXD slot " + slot +
+                " -> PROGRAM " + programArg +
+                ", BANK_MSB " + bankMsbArg +
+                ", BANK_LSB " + bankLsbArg +
+                " (subBank " + subBank + ", pc " + pc + ")");
+
+        setMPC(mpcArgs, trackIndex);
+    }
+
     public void displayTextInWindow(String text) {
         sendDataToJavaFX("CLIP:" + text);
     }
@@ -446,6 +598,28 @@ public class BitXFunctions {
         }
     }
 
+    // LFR: same behaviour as LIR but for FX Selector
+    public void selectFxInLayer(String commandArgs, int trackIndex) {
+        String[] parts = commandArgs.split(":");
+        String fxName = parts[0].trim();
+        int remotePageIndex = (parts.length > 1) ? validatePageNumber(parts[1].trim()) - 1 : -1;
+
+        ChainSelector selector = fxChainSelectors[trackIndex];
+        DeviceLayerBank layerBank = fxLayerBanks[trackIndex];
+
+        if (selector == null || layerBank == null) {
+            host.println("Error: FX Selector or FX layer bank not found for track " + trackIndex);
+            return;
+        }
+
+        Integer layerIndex = fxTrackLayerNames.get(trackIndex).get(fxName);
+        if (layerIndex != null) {
+            selector.activeChainIndex().set(layerIndex);
+        } else {
+            host.println("Error: FX layer not found: " + fxName);
+        }
+    }
+
     public void showPopupNotification(String text) {
         host.showPopupNotification(text);
     }
@@ -502,11 +676,6 @@ public class BitXFunctions {
             return;
         }
 
-        // Move the focus rectangle by selecting the slot
-
-
-
-
         int sceneWindowSize = sceneBank.getSizeOfBank();
         int scenePage  = foundScene / sceneWindowSize;
         int sceneSlot  = foundScene % sceneWindowSize;
@@ -521,14 +690,32 @@ public class BitXFunctions {
         slotBank.getItemAt(foundScene).select();
         slotBank.getItemAt(foundScene).showInEditor();
 
-
-        // sceneBank.scrollByPages(5);
-
-
         host.showPopupNotification("Jumped to \"" + targetTrackName + "\" / \"" + targetClipName + "\"");
     }
 
+    public void resetAllSendsOnAllTracks() {
+        host.println("Resetting all sends on all tracks...");
 
+        int numTracks = trackBank.getSizeOfBank();
+
+        for (int t = 0; t < numTracks; t++) {
+            Track track = trackBank.getItemAt(t);
+            if (track == null) continue;
+
+            SendBank sendBank = track.sendBank();
+            int numSends = sendBank.getSizeOfBank();
+            host.println("Track " + t + " has " + numSends + " sends in bank.");
+
+            for (int s = 0; s < numSends; s++) {
+                Send send = sendBank.getItemAt(s);
+                if (send == null) continue;
+
+                send.setImmediately(0.0);
+            }
+        }
+
+        host.println("✅ All sends reset to 0.0");
+    }
 
     private int validatePageNumber(String input) {
         try {

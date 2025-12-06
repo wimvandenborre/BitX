@@ -88,7 +88,7 @@ public class BitXGraphics {
               Thread.sleep(1000); // 🔄 Give JavaFX time to load
 
                 // **Resend Actual Track Colors** After JavaFX Has Started
-             //   host.println("🎨 Resending track colors to JavaFX...");
+             //   host.println("Resending track colors to JavaFX...");
 
             } catch (Exception e) {
                 host.println("Error starting JavaFX app: " + e.getMessage());
