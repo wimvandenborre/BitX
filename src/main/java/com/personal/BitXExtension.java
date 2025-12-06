@@ -756,6 +756,6 @@ public class BitXExtension extends ControllerExtension {
 
     @Override
     public void flush() {
-        // TODO: Send any updates here
+        // TODO: Send any updates here maybe
     }
 }
