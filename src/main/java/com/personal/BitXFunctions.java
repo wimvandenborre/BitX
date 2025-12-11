@@ -690,6 +690,17 @@ public class BitXFunctions {
         slotBank.getItemAt(foundScene).select();
         slotBank.getItemAt(foundScene).showInEditor();
 
+        // AFTER sceneBank.scrollIntoView(foundScene);
+
+        try {
+            // New format: /bitx/jumpScene <trackIndex> <sceneIndex>
+            oscSender.sendMessage("/bitx/jumpScene", new Object[]{ trackIndex, foundScene });
+            host.println("BitX: sent /bitx/jumpScene " + trackIndex + " " + foundScene);
+        } catch (IOException e) {
+            host.println("BitX: failed to send jumpScene OSC: " + e.getMessage());
+        }
+
+
         host.showPopupNotification("Jumped to \"" + targetTrackName + "\" / \"" + targetClipName + "\"");
     }
 
