@@ -70,6 +70,10 @@ public class BitXExtension extends ControllerExtension {
     private SettableBooleanValue displayWindowShowSetting;
     private Signal button_openPatreon, button_randomizeDevice;
     private Signal button_groovy;
+    private SettableEnumValue randomAmountSetting;
+    private int randomAmount = 10; // default
+    private final Map<String, Float> directParamValues = new HashMap<>();
+
 
 
 
@@ -278,6 +282,13 @@ public class BitXExtension extends ControllerExtension {
             directParameterIds.clear();
             Collections.addAll(directParameterIds, ids);
         });
+
+        cursorDevice.addDirectParameterNormalizedValueObserver((id, normalizedValue) -> {
+            if (!Float.isNaN((float) normalizedValue)) {
+                directParamValues.put(id, (float) normalizedValue); // normalizedValue is 0..1
+            }
+        });
+
 
         launcherCursorClip = cursorTrack.createLauncherCursorClip(16 * 8, 128);
         cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
@@ -563,6 +574,27 @@ public class BitXExtension extends ControllerExtension {
                 "Randomize"                   // button text
         );
 
+        // Random amount dropdown: 10..100
+        String[] amounts = new String[10];
+        for (int i = 0; i < 10; i++) amounts[i] = String.valueOf((i + 1) * 10);
+
+        randomAmountSetting = documentState.getEnumSetting(
+                "Random amount",   // label
+                "BitX",            // group/section
+                amounts,
+                "10"              // default
+        );
+
+        randomAmountSetting.addValueObserver(val -> {
+            try {
+                randomAmount = Integer.parseInt(val);
+                getHost().println("BitX: Random amount = " + randomAmount);
+            } catch (Exception ignored) {
+                randomAmount = 10;
+            }
+        });
+
+
 // When the button is clicked in Bitwig, this gets called:
         button_randomizeDevice.addSignalObserver(this::randomizeSelectedDevice);
 
@@ -571,6 +603,8 @@ public class BitXExtension extends ControllerExtension {
 
         host.showPopupNotification("BitX Initialized");
     }
+
+
 
     public class CommandEntry {
         public final CommandExecutor executor;
@@ -781,15 +815,30 @@ public class BitXExtension extends ControllerExtension {
             return;
         }
 
-        final int resolution = 16384; // enough steps for smooth values
+        final int resolution = 16384;
+
+        // amount 10..100 -> 0.10 .. 1.00
+        final double amt = Math.max(10, Math.min(100, randomAmount)) / 100.0;
 
         for (String id : directParameterIds) {
-            int step = random.nextInt(resolution); // [0, resolution-1]
+            // current value [0..1] (fallback 0.5 if unknown yet)
+            float current = directParamValues.getOrDefault(id, 0.5f);
+
+            // random target [0..1]
+            double rnd = random.nextDouble();
+
+            // blend: current -> random by amt
+            double out = (1.0 - amt) * current + amt * rnd;
+
+            int step = (int) Math.round(out * (resolution - 1));
             cursorDevice.setDirectParameterValueNormalized(id, step, resolution);
         }
 
-        getHost().showPopupNotification("BitX: Randomized " + directParameterIds.size() + " parameters");
+        getHost().showPopupNotification(
+                "BitX: Randomized (" + randomAmount + "%) " + directParameterIds.size() + " params"
+        );
     }
+
 
 
     @FunctionalInterface
