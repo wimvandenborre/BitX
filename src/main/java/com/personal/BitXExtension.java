@@ -50,6 +50,12 @@ public class BitXExtension extends ControllerExtension {
 
     private CursorTrack followCursorTrack;
 
+    // --- Selected device + direct-parameter randomizer ---
+    private PinnableCursorDevice cursorDevice;      // <- make this a field
+    private final List<String> directParameterIds = new ArrayList<>();
+    private final Random random = new Random();
+
+
     // We store the "Clip Type" setting during initialization.
     private SettableEnumValue clipTypeSetting;
 
@@ -62,8 +68,10 @@ public class BitXExtension extends ControllerExtension {
     private SettableStringValue oscSendIpSetting;
     private SettableRangedValue instrumentSelectorPosition, fxSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting, oscSendPortSetting, sendNumberSetting;
     private SettableBooleanValue displayWindowShowSetting;
-    private Signal button_openPatreon;
+    private Signal button_openPatreon, button_randomizeDevice;
     private Signal button_groovy;
+
+
 
     private Map<String, CommandEntry> commands = new HashMap<>();
 
@@ -184,6 +192,7 @@ public class BitXExtension extends ControllerExtension {
         button_openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
         button_openPatreon.addSignalObserver(() -> openPatreonPage(host));
 
+
         followCursorTrack = host.createCursorTrack("FollowTrack", "Jump Follow", 0, 0, true);
 
         MAX_TRACKS = (int) tracknNumberSetting.getRaw();
@@ -257,7 +266,18 @@ public class BitXExtension extends ControllerExtension {
         }
 
         CursorTrack cursorTrack = host.createCursorTrack("RemoteControlsTrack", "Selected Track", 0, 0, true);
-        PinnableCursorDevice cursorDevice = cursorTrack.createCursorDevice("RemoteControlsDevice", "Selected Device", 0, CursorDeviceFollowMode.FOLLOW_SELECTION);
+        cursorDevice = cursorTrack.createCursorDevice(
+                "RemoteControlsDevice",
+                "Selected Device",
+                0,
+                CursorDeviceFollowMode.FOLLOW_SELECTION
+        );
+
+// 👇 collect ALL direct parameter IDs of the currently selected device
+        cursorDevice.addDirectParameterIdObserver(ids -> {
+            directParameterIds.clear();
+            Collections.addAll(directParameterIds, ids);
+        });
 
         launcherCursorClip = cursorTrack.createLauncherCursorClip(16 * 8, 128);
         cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
@@ -524,6 +544,7 @@ public class BitXExtension extends ControllerExtension {
         SettableStringValue showCommandDocumentation = documentState.getStringSetting("Documentation", "Documentation", 200, "SNF: Sets note filter. Usage: SNF <E2>:<D5>.");
         String[] options = commands.keySet().toArray(new String[0]);
         Arrays.sort(options);
+
         SettableEnumValue commandDropDown = documentState.getEnumSetting(
                 "Command", "Commands", options, "SNF"
         );
@@ -535,6 +556,16 @@ public class BitXExtension extends ControllerExtension {
                 showCommandDocumentation.set(entry.documentation);
             }
         });
+
+        button_randomizeDevice = documentState.getSignalSetting(
+                "Randomize selected device",  // label in BitX UI
+                "BitX",                       // section/group name
+                "Randomize"                   // button text
+        );
+
+// When the button is clicked in Bitwig, this gets called:
+        button_randomizeDevice.addSignalObserver(this::randomizeSelectedDevice);
+
 
         initializeTrackAndClipObservers(host);
 
@@ -743,6 +774,23 @@ public class BitXExtension extends ControllerExtension {
             host.showPopupNotification("Please visit " + patreonUrl + " in your browser.");
         }
     }
+
+    private void randomizeSelectedDevice() {
+        if (cursorDevice == null || directParameterIds.isEmpty()) {
+            getHost().println("BitX: No device or no parameters to randomize.");
+            return;
+        }
+
+        final int resolution = 16384; // enough steps for smooth values
+
+        for (String id : directParameterIds) {
+            int step = random.nextInt(resolution); // [0, resolution-1]
+            cursorDevice.setDirectParameterValueNormalized(id, step, resolution);
+        }
+
+        getHost().showPopupNotification("BitX: Randomized " + directParameterIds.size() + " parameters");
+    }
+
 
     @FunctionalInterface
     private interface CommandExecutor {
