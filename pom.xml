@@ -20,7 +20,7 @@
 		<dependency>
 			<groupId>com.bitwig</groupId>
 			<artifactId>extension-api</artifactId>
-			<version>20</version>
+			<version>25</version>
 		</dependency>
 		<!-- JavaFX Base Modules -->
 		<dependency>
@@ -43,6 +43,14 @@
 
 
 	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<includes>
+					<include>**/*</include>
+				</includes>
+			</resource>
+		</resources>
 		<plugins>
 			  <plugin>
 					<groupId>org.apache.maven.plugins</groupId>
@@ -69,6 +77,27 @@
 						<configuration>
 							<sourceFile>${project.build.directory}/${project.build.finalName}.jar</sourceFile>
 							<destinationFile>/Users/wimvandenborre/Documents/Bitwig Studio/Extensions/PerSonal/BitX.bwextension</destinationFile>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- Add generated sources directory so generated stubs compile -->
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>build-helper-maven-plugin</artifactId>
+				<version>3.3.0</version>
+				<executions>
+					<execution>
+						<id>add-generated-sources</id>
+						<phase>generate-sources</phase>
+						<goals>
+							<goal>add-source</goal>
+						</goals>
+						<configuration>
+							<sources>
+								<source>${project.basedir}/src/generated-sources/bitwigapi</source>
+							</sources>
 						</configuration>
 					</execution>
 				</executions>

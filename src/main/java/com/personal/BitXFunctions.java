@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
@@ -30,6 +32,7 @@ public class BitXFunctions {
     private final ChainSelector[] fxChainSelectors;
     private final DeviceBank[][] fxLayerDeviceBanks;
 
+    private final DeviceBank[] drumRackDeviceBanks;
     private final Map<Integer, Map<String, Integer>> trackLayerNames;
     private final Map<Integer, Map<String, Integer>> fxTrackLayerNames;
 
@@ -62,6 +65,7 @@ public class BitXFunctions {
                          DeviceLayerBank[] fxLayerBanks,
                          ChainSelector[] fxChainSelectors,
                          DeviceBank[][] fxLayerDeviceBanks,
+                         DeviceBank[] drumRackDeviceBanks,
                          Map<Integer, Map<String, Integer>> trackLayerNames,
                          Map<Integer, Map<String, Integer>> fxTrackLayerNames,
                          CursorRemoteControlsPage[][] cursorRemoteControlsPages,
@@ -91,6 +95,7 @@ public class BitXFunctions {
         this.fxLayerBanks = fxLayerBanks;
         this.fxChainSelectors = fxChainSelectors;
         this.fxLayerDeviceBanks = fxLayerDeviceBanks;
+        this.drumRackDeviceBanks = drumRackDeviceBanks;
 
         this.trackLayerNames = trackLayerNames;
         this.fxTrackLayerNames = fxTrackLayerNames;
@@ -115,6 +120,7 @@ public class BitXFunctions {
         this.launcherCursorClip = launcherCursorClip;
 
         reconnectOscSender();
+
     }
 
     private void reconnectOscSender() {
@@ -532,30 +538,69 @@ public class BitXFunctions {
     }
 
     public void executeLDRCommand(String presetName, int trackIndex) {
-        String drumFile = Paths.get(drumPresetsPath, presetName + ".bwpreset").toString();
-        host.println("Loading preset file: " + drumFile);
-        File file = new File(drumFile);
-        if (!file.exists()) {
+        final String drumFile = Paths.get(drumPresetsPath, presetName + ".bwpreset").toString();
+        host.println("LDR request: " + drumFile + " (track " + trackIndex + ")");
+
+        checkPreset(drumFile);
+        if (!Files.exists(Paths.get(drumFile))) {
             host.println("Error: Preset file does not exist: " + drumFile);
             return;
         }
 
-        DeviceBank trackDeviceBank = deviceBanks[trackIndex];
-        Device replaceDrumRackDevice = trackDeviceBank.getDevice(1);
-        if (replaceDrumRackDevice == null) {
-            host.println("Error: replaceDrumRackDevice is null on this track");
-            return;
-        }
-
-        InsertionPoint insertionPoint = replaceDrumRackDevice.replaceDeviceInsertionPoint();
-        if (insertionPoint == null) {
-            host.println("Error: insertionPoint is null");
-            return;
-        }
-
-        insertionPoint.insertFile(drumFile);
-        host.println("Inserted preset file: " + drumFile);
+        // IMPORTANT: schedule on Bitwig's thread/context
+        host.scheduleTask(() -> doLdrReplaceNow(drumFile, trackIndex), 0);
     }
+
+
+    private void doLdrReplaceNow(String drumFile, int trackIndex) {
+        DeviceBank drumBank = drumRackDeviceBanks[trackIndex];
+        if (drumBank == null) {
+            host.println("LDR: drumRackDeviceBanks[" + trackIndex + "] is null");
+            return;
+        }
+
+        Device drumRack = drumBank.getDevice(0);
+        if (drumRack == null) {
+            host.println("LDR: matched drumRack device is null");
+            return;
+        }
+
+        // If you added exists().markInterested() during init, this becomes meaningful
+        if (!drumRack.exists().get()) {
+            host.println("LDR: No DrumRack matched on track " + trackIndex + " (exists=false)");
+            return;
+        }
+
+        // Focus it; helps reliability
+        drumRack.selectInEditor();
+
+        // Tiny delay often helps Bitwig actually perform the replacement
+        host.scheduleTask(() -> {
+            InsertionPoint ip = drumRack.replaceDeviceInsertionPoint();
+            if (ip == null) {
+                host.println("LDR: insertionPoint is null");
+                return;
+            }
+
+            host.println("LDR inserting preset into matched DrumRack: " + drumFile);
+            ip.insertFile(drumFile);
+            host.println("LDR insertFile() called");
+        }, 50);
+    }
+
+
+
+    public void checkPreset(String name) {
+        try {
+            Path presetPath = Paths.get(name);
+            if (Files.exists(presetPath)) host.println("Preset FOUND: " + presetPath);
+            else host.println("Preset NOT found: " + presetPath);
+        } catch (Exception e) {
+            host.println("Preset check FAILED:");
+            host.println(e.getMessage());
+        }
+    }
+
 
     public void selectInstrumentInLayer(String commandArgs, int trackIndex) {
         String[] parts = commandArgs.split(":");

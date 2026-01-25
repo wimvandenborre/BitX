@@ -37,6 +37,7 @@ public class BitXExtension extends ControllerExtension {
     private DeviceBank[] noteFilterDeviceBanks;
     private DeviceBank[] noteTransposeDeviceBanks;
     private DeviceBank[] mpcDeviceBanks;
+    private DeviceBank[] drumRackDeviceBanks;
 
     private CursorRemoteControlsPage cursorRemoteControlsPage;
 
@@ -215,6 +216,8 @@ public class BitXExtension extends ControllerExtension {
         noteFilterDeviceBanks = new DeviceBank[MAX_TRACKS];
         noteTransposeDeviceBanks = new DeviceBank[MAX_TRACKS];
         mpcDeviceBanks = new DeviceBank[MAX_TRACKS];
+        drumRackDeviceBanks = new DeviceBank[MAX_TRACKS];
+
 
         layerBanks = new DeviceLayerBank[MAX_TRACKS];
         chainSelectors = new ChainSelector[MAX_TRACKS];
@@ -423,6 +426,24 @@ public class BitXExtension extends ControllerExtension {
             mpcParams.add(mpcParamBANK_LSB);
             mpcParams.add(mpcParamCHANNEL);
             mpcParameters.put(i, mpcParams);
+
+
+            //DrumRacks
+
+            final UUID drumRackUUID = UUID.fromString("8ea97e45-0255-40fd-bc7e-94419741e9d1");
+
+            DeviceBank drumRackBank = track.createDeviceBank(16);
+            drumRackBank.setDeviceMatcher(host.createBitwigDeviceMatcher(drumRackUUID));
+            drumRackDeviceBanks[i] = drumRackBank;
+
+            Device dr = drumRackBank.getDevice(0);
+            dr.exists().markInterested();
+//            dr.name().markInterested();
+//            int finalI = i;
+//            dr.name().addValueObserver(name ->
+//                    host.println("Track " + finalI + " DrumRack match: " + name + " (exists=" + dr.exists().get() + ")")
+//            );
+
         }
 
         //Nudging the groove
@@ -458,6 +479,7 @@ public class BitXExtension extends ControllerExtension {
                 fxLayerBanks,
                 fxChainSelectors,
                 fxLayerDeviceBanks,
+                drumRackDeviceBanks,
                 trackLayerNames,
                 fxTrackLayerNames,
                 cursorRemoteControlsPages,
