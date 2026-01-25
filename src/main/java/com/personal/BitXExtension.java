@@ -3,6 +3,10 @@ package com.personal;
 import java.nio.file.Paths;
 import java.util.*;
 
+import com.bitwig.extension.api.opensoundcontrol.OscAddressSpace;
+import com.bitwig.extension.api.opensoundcontrol.OscMessage;
+import com.bitwig.extension.api.opensoundcontrol.OscModule;
+import com.bitwig.extension.api.opensoundcontrol.OscServer;
 import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.*;
 
@@ -12,6 +16,21 @@ public class BitXExtension extends ControllerExtension {
     private static int MAX_SCENES = 128;
     private static int MAX_LAYERS = 32;
     private static int MAX_SENDS = 16;
+    private static final String OSC_CATEGORY = "OSC";
+    private static final int OSC_PORT_MIN = 1;
+    private static final int OSC_PORT_MAX = 65535;
+    private static final int DEFAULT_OSC_IN_PORT = 9000;
+    private static final int DEFAULT_OSC_OUT_PORT = 8000;
+    private static final String DEFAULT_OSC_OUT_HOST = "127.0.0.1";
+    private static final boolean DEFAULT_OSC_IN_ENABLED = true;
+    private static final boolean DEFAULT_OSC_OUT_ENABLED = true;
+    private static final String OSC_TORSO_T1_ADDRESS = "/torsot1script/cc";
+    private static final String OSC_TARGET_SELECTED_DEVICE = "selecteddevice";
+    private static final String OSC_TARGET_TRACK_REMOTE = "trackremote";
+    private static final String OSC_TARGET_PROJECT_REMOTE = "projectremote";
+    private static final String DISPLAY_SOURCE_SELECTED_DEVICE_CURSOR = "selected-device-cursor";
+    private static final String OSC_TORSO_PAGE_ADDRESS = "/bitx/t1/page";
+    private static final String OSC_TORSO_KNOB_ADDRESS = "/bitx/t1/knob";
 
     private TrackBank trackBank;
     private SceneBank sceneBank;
@@ -40,6 +59,10 @@ public class BitXExtension extends ControllerExtension {
     private DeviceBank[] drumRackDeviceBanks;
 
     private CursorRemoteControlsPage cursorRemoteControlsPage;
+    private CursorDevice[] trackSelectedDeviceCursors;
+    private CursorRemoteControlsPage[] trackSelectedDevicePages;
+    private CursorRemoteControlsPage[] trackRemotePages;
+    private CursorRemoteControlsPage projectRemotePage;
 
     private CursorRemoteControlsPage[][] cursorRemoteControlsPages;
     private CursorRemoteControlsPage[][] fxCursorRemoteControlsPages;
@@ -50,6 +73,7 @@ public class BitXExtension extends ControllerExtension {
     private PinnableCursorClip launcherCursorClip;
 
     private CursorTrack followCursorTrack;
+    private CursorTrack selectedCursorTrack;
 
     // --- Selected device + direct-parameter randomizer ---
     private PinnableCursorDevice cursorDevice;      // <- make this a field
@@ -66,9 +90,20 @@ public class BitXExtension extends ControllerExtension {
 
     //Preference settings in control Panel
     private Preferences prefs;
-    private SettableStringValue oscSendIpSetting;
-    private SettableRangedValue instrumentSelectorPosition, fxSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting, oscSendPortSetting, sendNumberSetting;
+    private SettableStringValue oscOutHostSetting;
+    private SettableStringValue oscOutNameSetting;
+    private SettableStringValue oscOut2HostSetting;
+    private SettableStringValue oscOut2NameSetting;
+    private SettableStringValue oscOut3HostSetting;
+    private SettableStringValue oscOut3NameSetting;
+    private SettableRangedValue instrumentSelectorPosition, fxSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting, oscOutPortSetting, oscOut2PortSetting, oscOut3PortSetting, oscInPortSetting, sendNumberSetting;
     private SettableBooleanValue displayWindowShowSetting;
+    private SettableBooleanValue oscInEnabledSetting;
+    private SettableBooleanValue oscOutEnabledSetting;
+    private SettableBooleanValue oscOut2EnabledSetting;
+    private SettableBooleanValue oscOut3EnabledSetting;
+    private SettableEnumValue oscDefaultOutputSetting;
+    private SettableEnumValue oscTorsoOutputSetting;
     private Signal button_openPatreon, button_randomizeDevice;
     private Signal button_groovy;
     private SettableEnumValue randomAmountSetting;
@@ -86,6 +121,28 @@ public class BitXExtension extends ControllerExtension {
     private Map<Integer, Map<String, Integer>> fxTrackLayerNames = new HashMap<>();
 
     private BitXGraphics bitXGraphics;
+    private BitXFunctions bitXFunctions;
+    private String activeDisplaySource = DISPLAY_SOURCE_SELECTED_DEVICE_CURSOR;
+
+    private OscModule oscModule;
+    private OscAddressSpace oscAddressSpace;
+    private OscServer oscServer;
+    private int oscInPort;
+    private int oscOutPort;
+    private int oscOut2Port;
+    private int oscOut3Port;
+    private String oscOutHost;
+    private String oscOutName;
+    private String oscOut2Host;
+    private String oscOut2Name;
+    private String oscOut3Host;
+    private String oscOut3Name;
+    private boolean oscInEnabled;
+    private boolean oscOutEnabled;
+    private boolean oscOut2Enabled;
+    private boolean oscOut3Enabled;
+    private String defaultOscOutputName;
+    private String torsoOscOutputName;
 
     //Instrument Selector
     private final UUID instrumentSelectorUUID = UUID.fromString("9588fbcf-721a-438b-8555-97e4231f7d2c");
@@ -192,10 +249,160 @@ public class BitXExtension extends ControllerExtension {
         layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
         sendNumberSetting = prefs.getNumberSetting("Number of sends", "Display", 1, 16, 1, "sends", 4);
         displayWindowShowSetting = prefs.getBooleanSetting("Display Window", "Display", false);
-        oscSendIpSetting = prefs.getStringSetting("Osc Send IP", "OSC", 15, "127.0.0.1");
-        oscSendPortSetting = prefs.getNumberSetting("Osc Send Port", "OSC", 1024, 65535, 1, "", 8000);
+        oscInEnabledSetting = prefs.getBooleanSetting("OSC In Enabled", OSC_CATEGORY, DEFAULT_OSC_IN_ENABLED);
+        oscInPortSetting = prefs.getNumberSetting("OSC In Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_IN_PORT);
+        oscOutNameSetting = prefs.getStringSetting("OSC Out 1 Name", OSC_CATEGORY, 32, "TouchDesigner");
+        oscOutHostSetting = prefs.getStringSetting("OSC Out 1 Host", OSC_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
+        oscOutPortSetting = prefs.getNumberSetting("OSC Out 1 Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT);
+        oscOutEnabledSetting = prefs.getBooleanSetting("OSC Out 1 Enabled", OSC_CATEGORY, DEFAULT_OSC_OUT_ENABLED);
+        oscOut2NameSetting = prefs.getStringSetting("OSC Out 2 Name", OSC_CATEGORY, 32, "TouchOSC");
+        oscOut2HostSetting = prefs.getStringSetting("OSC Out 2 Host", OSC_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
+        oscOut2EnabledSetting = prefs.getBooleanSetting("OSC Out 2 Enabled", OSC_CATEGORY, false);
+        oscOut3NameSetting = prefs.getStringSetting("OSC Out 3 Name", OSC_CATEGORY, 32, "Output3");
+        oscOut3HostSetting = prefs.getStringSetting("OSC Out 3 Host", OSC_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
+        oscOut3PortSetting = prefs.getNumberSetting("OSC Out 3 Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT + 2);
+        oscOut3EnabledSetting = prefs.getBooleanSetting("OSC Out 3 Enabled", OSC_CATEGORY, false);
+        oscOut2PortSetting = prefs.getNumberSetting("OSC Out 2 Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT + 1);
+        oscTorsoOutputSetting = prefs.getEnumSetting(
+                "BitxTorsoT-1 Output",
+                OSC_CATEGORY,
+                new String[]{"Output 1", "Output 2", "Output 3"},
+                "Output 1"
+        );
+        oscDefaultOutputSetting = prefs.getEnumSetting(
+                "OSC Default Output",
+                OSC_CATEGORY,
+                new String[]{"Output 1", "Output 2", "Output 3"},
+                "Output 1"
+        );
         button_openPatreon = prefs.getSignalSetting("Support BitX on Patreon!", "Support", "Go to Patreon.com/CreatingSpaces");
         button_openPatreon.addSignalObserver(() -> openPatreonPage(host));
+        oscModule = host.getOscModule();
+        oscAddressSpace = oscModule.createAddressSpace();
+        oscAddressSpace.setName("BitX");
+        oscAddressSpace.setShouldLogMessages(true);
+        oscAddressSpace.registerDefaultMethod((source, message) ->
+                host.println("BitX OSC recv: " + message.getAddressPattern()));
+        registerOscHandlers();
+        oscServer = oscModule.createUdpServer(oscAddressSpace);
+        oscInPort = (int) Math.round(oscInPortSetting.getRaw());
+        oscOutPort = (int) Math.round(oscOutPortSetting.getRaw());
+        oscOut2Port = (int) Math.round(oscOut2PortSetting.getRaw());
+        oscOut3Port = (int) Math.round(oscOut3PortSetting.getRaw());
+        oscOutHost = oscOutHostSetting.get();
+        oscOut2Host = oscOut2HostSetting.get();
+        oscOut3Host = oscOut3HostSetting.get();
+        oscOutName = oscOutNameSetting.get();
+        oscOut2Name = oscOut2NameSetting.get();
+        oscOut3Name = oscOut3NameSetting.get();
+        oscInEnabled = oscInEnabledSetting.get();
+        oscOutEnabled = oscOutEnabledSetting.get();
+        oscOut2Enabled = oscOut2EnabledSetting.get();
+        oscOut3Enabled = oscOut3EnabledSetting.get();
+        defaultOscOutputName = oscDefaultOutputSetting.get();
+        torsoOscOutputName = oscTorsoOutputSetting.get();
+        if (oscInPort <= 0) {
+            oscInPort = DEFAULT_OSC_IN_PORT;
+        }
+        if (oscOutPort <= 0) {
+            oscOutPort = DEFAULT_OSC_OUT_PORT;
+        }
+        if (oscOut2Port <= 0) {
+            oscOut2Port = DEFAULT_OSC_OUT_PORT + 1;
+        }
+        if (oscOut3Port <= 0) {
+            oscOut3Port = DEFAULT_OSC_OUT_PORT + 2;
+        }
+        if (oscOutHost == null || oscOutHost.trim().isEmpty()) {
+            oscOutHost = DEFAULT_OSC_OUT_HOST;
+        }
+        if (oscOut2Host == null || oscOut2Host.trim().isEmpty()) {
+            oscOut2Host = DEFAULT_OSC_OUT_HOST;
+        }
+        if (oscOut3Host == null || oscOut3Host.trim().isEmpty()) {
+            oscOut3Host = DEFAULT_OSC_OUT_HOST;
+        }
+        if (oscOutName == null || oscOutName.trim().isEmpty()) {
+            oscOutName = "Output 1";
+        }
+        if (oscOut2Name == null || oscOut2Name.trim().isEmpty()) {
+            oscOut2Name = "Output 2";
+        }
+        if (oscOut3Name == null || oscOut3Name.trim().isEmpty()) {
+            oscOut3Name = "Output 3";
+        }
+        if (defaultOscOutputName == null || defaultOscOutputName.trim().isEmpty()) {
+            defaultOscOutputName = "Output 1";
+        }
+        if (torsoOscOutputName == null || torsoOscOutputName.trim().isEmpty()) {
+            torsoOscOutputName = "Output 1";
+        }
+        oscInPortSetting.addRawValueObserver(value -> {
+            oscInPort = (int) Math.round(value);
+            refreshOscServer();
+        });
+        oscOutNameSetting.addValueObserver(value -> {
+            oscOutName = value;
+            notifyOscRestartRequired();
+        });
+        oscOutPortSetting.addRawValueObserver(value -> {
+            oscOutPort = (int) Math.round(value);
+            notifyOscRestartRequired();
+        });
+        oscOutHostSetting.addValueObserver(value -> {
+            oscOutHost = value;
+            notifyOscRestartRequired();
+        });
+        oscOut2NameSetting.addValueObserver(value -> {
+            oscOut2Name = value;
+            notifyOscRestartRequired();
+        });
+        oscOut2PortSetting.addRawValueObserver(value -> {
+            oscOut2Port = (int) Math.round(value);
+            notifyOscRestartRequired();
+        });
+        oscOut2HostSetting.addValueObserver(value -> {
+            oscOut2Host = value;
+            notifyOscRestartRequired();
+        });
+        oscOut3NameSetting.addValueObserver(value -> {
+            oscOut3Name = value;
+            notifyOscRestartRequired();
+        });
+        oscOut3PortSetting.addRawValueObserver(value -> {
+            oscOut3Port = (int) Math.round(value);
+            notifyOscRestartRequired();
+        });
+        oscOut3HostSetting.addValueObserver(value -> {
+            oscOut3Host = value;
+            notifyOscRestartRequired();
+        });
+        oscInEnabledSetting.addValueObserver(value -> {
+            oscInEnabled = value;
+            refreshOscServer();
+        });
+        oscOutEnabledSetting.addValueObserver(value -> {
+            oscOutEnabled = value;
+            notifyOscRestartRequired();
+        });
+        oscOut2EnabledSetting.addValueObserver(value -> {
+            oscOut2Enabled = value;
+            notifyOscRestartRequired();
+        });
+        oscOut3EnabledSetting.addValueObserver(value -> {
+            oscOut3Enabled = value;
+            notifyOscRestartRequired();
+        });
+        oscDefaultOutputSetting.addValueObserver(value -> {
+            defaultOscOutputName = value;
+            notifyOscRestartRequired();
+        });
+        oscTorsoOutputSetting.addValueObserver(value -> {
+            torsoOscOutputName = resolveOutputName(value);
+        });
+        refreshOscServer();
+
+        bitXGraphics = new BitXGraphics(host);
 
 
         followCursorTrack = host.createCursorTrack("FollowTrack", "Jump Follow", 0, 0, true);
@@ -230,8 +437,7 @@ public class BitXExtension extends ControllerExtension {
         trackBank = host.createTrackBank(MAX_TRACKS, MAX_SENDS, MAX_SCENES, true);
         sceneBank = host.createSceneBank(MAX_SCENES);
 
-        // Initialize BitXGraphics instance for JavaFX communication
-        bitXGraphics = new BitXGraphics(host);
+        initializeOscDisplayPages();
 
         if (displayWindowShowSetting.get()) {
             try {
@@ -240,6 +446,7 @@ public class BitXExtension extends ControllerExtension {
                 host.errorln("Failed to start display process: " + e.getMessage());
             }
         }
+        pushDisplaySnapshot(cursorRemoteControlsPage, DISPLAY_SOURCE_SELECTED_DEVICE_CURSOR);
 
         //Initialize the master track
         MasterTrack masterTrack = getHost().createMasterTrack(0);
@@ -272,8 +479,8 @@ public class BitXExtension extends ControllerExtension {
             });
         }
 
-        CursorTrack cursorTrack = host.createCursorTrack("RemoteControlsTrack", "Selected Track", 0, 0, true);
-        cursorDevice = cursorTrack.createCursorDevice(
+        selectedCursorTrack = host.createCursorTrack("RemoteControlsTrack", "Selected Track", 0, 0, true);
+        cursorDevice = selectedCursorTrack.createCursorDevice(
                 "RemoteControlsDevice",
                 "Selected Device",
                 0,
@@ -293,29 +500,17 @@ public class BitXExtension extends ControllerExtension {
         });
 
 
-        launcherCursorClip = cursorTrack.createLauncherCursorClip(16 * 8, 128);
+        launcherCursorClip = selectedCursorTrack.createLauncherCursorClip(16 * 8, 128);
         cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
 
         cursorRemoteControlsPages = new CursorRemoteControlsPage[MAX_TRACKS][MAX_LAYERS];
         fxCursorRemoteControlsPages = new CursorRemoteControlsPage[MAX_TRACKS][MAX_LAYERS];
 
-        if (cursorRemoteControlsPage != null) {
-            cursorRemoteControlsPage.getName().addValueObserver(name -> {
-                bitXGraphics.sendDataToJavaFX("PAGE:" + name);
-            });
-
-            for (int i = 0; i < 8; i++) {
-                int index = i;
-                Parameter knob = cursorRemoteControlsPage.getParameter(i);
-                knob.name().addValueObserver(name -> {
-                    bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + index + ":" + name);
-                });
-
-                knob.value().addValueObserver(value -> {
-                    bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + index + ":" + value);
-                });
-            }
-        }
+        registerDisplayPage(cursorRemoteControlsPage, DISPLAY_SOURCE_SELECTED_DEVICE_CURSOR);
+        selectedCursorTrack.position().addValueObserver(position -> {
+            activeDisplaySource = DISPLAY_SOURCE_SELECTED_DEVICE_CURSOR;
+            pushDisplaySnapshot(cursorRemoteControlsPage, DISPLAY_SOURCE_SELECTED_DEVICE_CURSOR);
+        });
 
         //Look for specific devices init
         channelFilterDevices.clear();
@@ -461,13 +656,32 @@ public class BitXExtension extends ControllerExtension {
 
         initializeLayersAndDevices(MAX_LAYERS);
 
-        String oscIp = oscSendIpSetting.get();
-        int oscPort = (int) oscSendPortSetting.getRaw();
-        if (oscPort == 0) {
-            oscPort = 8000;
-        }
+        List<BitXFunctions.OscOutputConfig> oscOutputs = new ArrayList<>();
+        oscOutputs.add(new BitXFunctions.OscOutputConfig(
+                oscOutName,
+                oscOutHost,
+                oscOutPort,
+                oscOutEnabled,
+                Arrays.asList(oscOutName, "1", "out1", "output1", "output 1")
+        ));
+        oscOutputs.add(new BitXFunctions.OscOutputConfig(
+                oscOut2Name,
+                oscOut2Host,
+                oscOut2Port,
+                oscOut2Enabled,
+                Arrays.asList(oscOut2Name, "2", "out2", "output2", "output 2")
+        ));
+        oscOutputs.add(new BitXFunctions.OscOutputConfig(
+                oscOut3Name,
+                oscOut3Host,
+                oscOut3Port,
+                oscOut3Enabled,
+                Arrays.asList(oscOut3Name, "3", "out3", "output3", "output 3")
+        ));
+        String defaultOutputName = resolveOutputName(defaultOscOutputName);
+        torsoOscOutputName = resolveOutputName(torsoOscOutputName);
 
-        BitXFunctions bitXFunctions = new BitXFunctions(
+        bitXFunctions = new BitXFunctions(
                 host,
                 transport,
                 drumPresetsPath,
@@ -488,8 +702,8 @@ public class BitXExtension extends ControllerExtension {
                 trackNoteFilterParameters,
                 trackNoteTransposeParameters,
                 mpcParameters,
-                oscIp,
-                oscPort,
+                oscOutputs,
+                defaultOutputName,
                 trackBank,
                 sceneBank,
                 MAX_TRACKS,
@@ -546,7 +760,7 @@ public class BitXExtension extends ControllerExtension {
 
         commands.put("OSC", new CommandEntry(
                 (arg, trackIndex) -> bitXFunctions.sendOSCMessage(arg),
-                "OSC: Sends an OSC message. Usage: ()OSC /address arg1 arg2 ..."
+                "OSC: Sends an OSC message. Usage: ()OSC /address arg1 arg2 ... or ()OSC <outputName> /address arg1 arg2 ..."
         ));
 
         commands.put("STS", new CommandEntry(
@@ -829,6 +1043,310 @@ public class BitXExtension extends ControllerExtension {
             host.errorln("Failed to open Patreon page: " + e.getMessage());
             host.showPopupNotification("Please visit " + patreonUrl + " in your browser.");
         }
+    }
+
+    private void registerOscHandlers() {
+        oscAddressSpace.registerMethod(
+                OSC_TORSO_T1_ADDRESS,
+                "*",
+                "Torso T-1 CC",
+                (source, message) -> handleTorsoT1Osc(message)
+        );
+    }
+
+    private String resolveOutputName(String selection) {
+        if ("Output 2".equalsIgnoreCase(selection)) {
+            return oscOut2Name;
+        }
+        if ("Output 3".equalsIgnoreCase(selection)) {
+            return oscOut3Name;
+        }
+        return oscOutName;
+    }
+
+    private void refreshOscServer() {
+        getHost().println("BitX: OSC in enabled=" + oscInEnabled + " port=" + oscInPort);
+        if (oscServer == null) {
+            getHost().println("BitX: OSC server not initialized.");
+            return;
+        }
+        if (!oscInEnabled) {
+            getHost().println("BitX: OSC server disabled.");
+            return;
+        }
+        if (oscInPort <= 0) {
+            getHost().println("BitX: OSC server port invalid.");
+            return;
+        }
+        try {
+            getHost().println("BitX: Starting OSC server on port " + oscInPort);
+            oscServer.start(oscInPort);
+        } catch (Exception e) {
+            getHost().errorln("BitX: Failed to start OSC server on port " + oscInPort + ": " + e.getMessage());
+        }
+    }
+
+    private void notifyOscRestartRequired() {
+        getHost().println("BitX: OSC output settings updated; restart controller to apply.");
+    }
+
+    private void initializeOscDisplayPages() {
+        trackSelectedDeviceCursors = new CursorDevice[MAX_TRACKS];
+        trackSelectedDevicePages = new CursorRemoteControlsPage[MAX_TRACKS];
+        trackRemotePages = new CursorRemoteControlsPage[MAX_TRACKS];
+
+        for (int i = 0; i < MAX_TRACKS; i++) {
+            Track track = trackBank.getItemAt(i);
+
+            trackSelectedDeviceCursors[i] = track.createCursorDevice("BitX Track " + (i + 1) + " Selected Device");
+            trackSelectedDevicePages[i] = trackSelectedDeviceCursors[i].createCursorRemoteControlsPage(8);
+            registerDisplayPage(trackSelectedDevicePages[i], displaySourceSelectedDeviceTrack(i));
+
+            trackRemotePages[i] = track.createCursorRemoteControlsPage(8);
+            registerDisplayPage(trackRemotePages[i], displaySourceTrackRemote(i));
+        }
+
+        projectRemotePage = getHost().getProject()
+                .getRootTrackGroup()
+                .createCursorRemoteControlsPage(8);
+        registerDisplayPage(projectRemotePage, displaySourceProjectRemote());
+    }
+
+    private void registerDisplayPage(CursorRemoteControlsPage page, String sourceKey) {
+        if (page == null) {
+            return;
+        }
+        page.getName().addValueObserver(name -> {
+            if (!sourceKey.equals(activeDisplaySource) || bitXGraphics == null) {
+                return;
+            }
+            bitXGraphics.sendDataToJavaFX("PAGE:" + name);
+        });
+
+        for (int i = 0; i < 8; i++) {
+            int index = i;
+            Parameter knob = page.getParameter(i);
+            knob.exists().addValueObserver(exists -> {
+                if (!sourceKey.equals(activeDisplaySource) || bitXGraphics == null) {
+                    return;
+                }
+                if (!exists) {
+                    bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + index + ":0");
+                    bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + index + ":0.0");
+                }
+            });
+            knob.name().addValueObserver(name -> {
+                if (!sourceKey.equals(activeDisplaySource) || bitXGraphics == null) {
+                    return;
+                }
+                bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + index + ":" + name);
+            });
+            knob.value().addValueObserver(value -> {
+                if (!sourceKey.equals(activeDisplaySource) || bitXGraphics == null) {
+                    return;
+                }
+                bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + index + ":" + value);
+            });
+        }
+    }
+
+    private void showDisplayPage(CursorRemoteControlsPage page, String sourceKey, int pageIndex) {
+        if (page == null) {
+            return;
+        }
+        activeDisplaySource = sourceKey;
+        if (pageIndex >= 0) {
+            page.selectedPageIndex().set(pageIndex);
+        }
+        pushDisplaySnapshot(page, sourceKey);
+    }
+
+    private void pushDisplaySnapshot(CursorRemoteControlsPage page, String sourceKey) {
+        if (page == null || bitXGraphics == null || !sourceKey.equals(activeDisplaySource)) {
+            return;
+        }
+        String pageName = page.getName().get();
+        bitXGraphics.sendDataToJavaFX("PAGE:" + (pageName == null ? "" : pageName));
+
+        for (int i = 0; i < 8; i++) {
+            Parameter knob = page.getParameter(i);
+            boolean exists = knob.exists().get();
+            if (!exists) {
+                bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + i + ":0");
+                bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + i + ":0.0");
+                continue;
+            }
+            String name = knob.name().get();
+            bitXGraphics.sendDataToJavaFX("KNOB_NAME:" + i + ":" + (name == null ? "" : name));
+            bitXGraphics.sendDataToJavaFX("KNOB_VALUE:" + i + ":" + knob.value().get());
+        }
+    }
+
+    private void handleTorsoT1Osc(OscMessage message) {
+        if (!oscInEnabled) {
+            return;
+        }
+        getHost().println("BitX OSC recv " + message.getAddressPattern() + " " + message.getArguments());
+        if (bitXFunctions != null) {
+            bitXFunctions.sendOscMessageToNamedOutput(
+                    torsoOscOutputName,
+                    message.getAddressPattern(),
+                    message.getArguments()
+            );
+        }
+        String targetType = readOscString(message, 3);
+        int targetTrack = readOscInt(message, 4, 0);
+        int targetPage = readOscInt(message, 5, 0);
+
+        if (targetType == null || targetType.isEmpty()) {
+            return;
+        }
+
+        switch (targetType.toLowerCase(Locale.ROOT)) {
+            case OSC_TARGET_SELECTED_DEVICE:
+                showSelectedDeviceForTrack(targetTrack);
+                sendTorsoSnapshotForTrack(targetTrack);
+                break;
+            case OSC_TARGET_TRACK_REMOTE:
+                showTrackRemoteForTrack(targetTrack, targetPage);
+                sendTorsoSnapshotForTrackRemote(targetTrack, targetPage);
+                break;
+            case OSC_TARGET_PROJECT_REMOTE:
+                showProjectRemote(targetPage);
+                sendTorsoSnapshotForProjectRemote(targetPage);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private void showSelectedDeviceForTrack(int targetTrackOneBased) {
+        int trackIndex = targetTrackOneBased - 1;
+        if (trackIndex < 0 || trackIndex >= MAX_TRACKS) {
+            return;
+        }
+        showDisplayPage(
+                trackSelectedDevicePages[trackIndex],
+                displaySourceSelectedDeviceTrack(trackIndex),
+                -1
+        );
+    }
+
+    private void showTrackRemoteForTrack(int targetTrackOneBased, int targetPageOneBased) {
+        int trackIndex = targetTrackOneBased - 1;
+        if (trackIndex < 0 || trackIndex >= MAX_TRACKS) {
+            return;
+        }
+        int pageIndex = targetPageOneBased - 1;
+        showDisplayPage(
+                trackRemotePages[trackIndex],
+                displaySourceTrackRemote(trackIndex),
+                pageIndex
+        );
+    }
+
+    private void showProjectRemote(int targetPageOneBased) {
+        int pageIndex = targetPageOneBased - 1;
+        showDisplayPage(projectRemotePage, displaySourceProjectRemote(), pageIndex);
+    }
+
+    private void sendTorsoSnapshotForTrack(int targetTrackOneBased) {
+        int trackIndex = targetTrackOneBased - 1;
+        if (trackIndex < 0 || trackIndex >= MAX_TRACKS) {
+            return;
+        }
+        sendTorsoOscSnapshot(trackSelectedDevicePages[trackIndex], -1);
+    }
+
+    private void sendTorsoSnapshotForTrackRemote(int targetTrackOneBased, int targetPageOneBased) {
+        int trackIndex = targetTrackOneBased - 1;
+        if (trackIndex < 0 || trackIndex >= MAX_TRACKS) {
+            return;
+        }
+        int pageIndex = targetPageOneBased - 1;
+        sendTorsoOscSnapshot(trackRemotePages[trackIndex], pageIndex);
+    }
+
+    private void sendTorsoSnapshotForProjectRemote(int targetPageOneBased) {
+        int pageIndex = targetPageOneBased - 1;
+        sendTorsoOscSnapshot(projectRemotePage, pageIndex);
+    }
+
+    private void sendTorsoOscSnapshot(CursorRemoteControlsPage page, int pageIndex) {
+        if (page == null || bitXFunctions == null) {
+            return;
+        }
+        if (pageIndex >= 0) {
+            page.selectedPageIndex().set(pageIndex);
+        }
+        String pageName = page.getName().get();
+        List<Object> pageArgs = new ArrayList<>();
+        pageArgs.add(pageName == null ? "" : pageName);
+        bitXFunctions.sendOscMessageToNamedOutput(torsoOscOutputName, OSC_TORSO_PAGE_ADDRESS, pageArgs);
+
+        for (int i = 0; i < 8; i++) {
+            Parameter knob = page.getParameter(i);
+            boolean exists = knob.exists().get();
+            String name = exists ? knob.name().get() : "0";
+            float value = exists ? (float) knob.value().get() : 0.0f;
+            List<Object> args = new ArrayList<>();
+            args.add(value);
+            args.add(name == null ? "" : name);
+            bitXFunctions.sendOscMessageToNamedOutput(
+                    torsoOscOutputName,
+                    OSC_TORSO_KNOB_ADDRESS + (i + 1),
+                    args
+            );
+        }
+    }
+
+    private String displaySourceSelectedDeviceTrack(int trackIndex) {
+        return "selected-device-track-" + trackIndex;
+    }
+
+    private String displaySourceTrackRemote(int trackIndex) {
+        return "track-remote-" + trackIndex;
+    }
+
+    private String displaySourceProjectRemote() {
+        return "project-remote";
+    }
+
+    private int readOscInt(OscMessage message, int index, int defaultValue) {
+        try {
+            Object value = message.getArguments().get(index);
+            if (value instanceof Integer) {
+                return (Integer) value;
+            }
+            if (value instanceof Long) {
+                return ((Long) value).intValue();
+            }
+            if (value instanceof Float) {
+                return Math.round((Float) value);
+            }
+            if (value instanceof Double) {
+                return (int) Math.round((Double) value);
+            }
+            if (value instanceof String) {
+                return Integer.parseInt(((String) value).trim());
+            }
+        } catch (Exception ignored) {
+        }
+        return defaultValue;
+    }
+
+    private String readOscString(OscMessage message, int index) {
+        try {
+            Object value = message.getArguments().get(index);
+            if (value instanceof String) {
+                return (String) value;
+            }
+            if (value != null) {
+                return value.toString();
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
     }
 
     private void randomizeSelectedDevice() {

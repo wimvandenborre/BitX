@@ -16,9 +16,9 @@ import java.util.*;
 
 public class BitXFunctions {
     private final ControllerHost host;
-    private OscConnection oscSender;
-    private String oscIp;
-    private int oscPort;
+    private final Map<String, OscOutput> oscOutputs = new HashMap<>();
+    private final Map<String, String> oscOutputAliases = new HashMap<>();
+    private final String defaultOscOutput;
     private final Transport transport;
     private final String drumPresetsPath;
 
@@ -54,6 +54,38 @@ public class BitXFunctions {
 
     private Timer bpmTransitionTimer;
 
+    public static final class OscOutputConfig {
+        public final String name;
+        public final String host;
+        public final int port;
+        public final boolean enabled;
+        public final List<String> aliases;
+
+        public OscOutputConfig(String name, String host, int port, boolean enabled, List<String> aliases) {
+            this.name = name;
+            this.host = host;
+            this.port = port;
+            this.enabled = enabled;
+            this.aliases = aliases == null ? Collections.emptyList() : aliases;
+        }
+    }
+
+    private static final class OscOutput {
+        private final String name;
+        private final String host;
+        private final int port;
+        private final boolean enabled;
+        private final OscConnection connection;
+
+        private OscOutput(String name, String host, int port, boolean enabled, OscConnection connection) {
+            this.name = name;
+            this.host = host;
+            this.port = port;
+            this.enabled = enabled;
+            this.connection = connection;
+        }
+    }
+
     public BitXFunctions(ControllerHost host,
                          Transport transport,
                          String drumPresetsPath,
@@ -74,8 +106,8 @@ public class BitXFunctions {
                          Map<Integer, List<Parameter>> trackNoteFilterParameters,
                          Map<Integer, List<Parameter>> trackNoteTransposeParameters,
                          Map<Integer, List<Parameter>> mpcParameters,
-                         String oscIp,
-                         int oscPort,
+                         List<OscOutputConfig> oscOutputConfigs,
+                         String defaultOscOutput,
                          TrackBank trackBank,
                          SceneBank sceneBank,
                          int maxTracks,
@@ -108,8 +140,8 @@ public class BitXFunctions {
         this.trackNoteTransposeParameters = trackNoteTransposeParameters;
         this.mpcParameters = mpcParameters;
 
-        this.oscIp = oscIp;
-        this.oscPort = oscPort;
+        this.defaultOscOutput = normalizeOscKey(defaultOscOutput);
+        initializeOscOutputs(oscOutputConfigs);
 
         this.trackBank = trackBank;
         this.sceneBank = sceneBank;
@@ -119,14 +151,64 @@ public class BitXFunctions {
         this.followCursorTrack = followCursorTrack;
         this.launcherCursorClip = launcherCursorClip;
 
-        reconnectOscSender();
-
     }
 
-    private void reconnectOscSender() {
-        host.println("Reconnecting OSC sender to " + oscIp + ":" + oscPort);
+    private void initializeOscOutputs(List<OscOutputConfig> oscOutputConfigs) {
+        if (oscOutputConfigs == null || oscOutputConfigs.isEmpty()) {
+            return;
+        }
         OscModule oscModule = host.getOscModule();
-        oscSender = oscModule.connectToUdpServer(oscIp, oscPort, null);
+        for (OscOutputConfig config : oscOutputConfigs) {
+            if (config == null) {
+                continue;
+            }
+            String key = normalizeOscKey(config.name);
+            String hostValue = config.host == null ? "" : config.host.trim();
+            int portValue = config.port;
+            if (!config.enabled || hostValue.isEmpty() || portValue <= 0) {
+                oscOutputs.put(key, new OscOutput(config.name, hostValue, portValue, false, null));
+                registerOscAliases(key, config.aliases);
+                continue;
+            }
+            try {
+                OscConnection connection = oscModule.connectToUdpServer(hostValue, portValue, null);
+                oscOutputs.put(key, new OscOutput(config.name, hostValue, portValue, true, connection));
+                registerOscAliases(key, config.aliases);
+                host.println("OSC output ready: " + config.name + " -> " + hostValue + ":" + portValue);
+            } catch (Exception e) {
+                host.println("Error connecting OSC output " + config.name + ": " + e.getMessage());
+                oscOutputs.put(key, new OscOutput(config.name, hostValue, portValue, false, null));
+                registerOscAliases(key, config.aliases);
+            }
+        }
+    }
+
+    private void registerOscAliases(String key, List<String> aliases) {
+        if (aliases == null) {
+            return;
+        }
+        for (String alias : aliases) {
+            String normalized = normalizeOscKey(alias);
+            if (!normalized.isEmpty()) {
+                oscOutputAliases.put(normalized, key);
+            }
+        }
+    }
+
+    private String resolveOscOutputKey(String name) {
+        String normalized = normalizeOscKey(name);
+        if (normalized.isEmpty()) {
+            return defaultOscOutput;
+        }
+        String resolved = oscOutputAliases.get(normalized);
+        return resolved == null ? normalized : resolved;
+    }
+
+    private String normalizeOscKey(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     public void sendOSCMessage(String arg) {
@@ -141,27 +223,57 @@ public class BitXFunctions {
             return;
         }
 
+        String outputName = defaultOscOutput;
         String address = parts[0];
-        Object[] arguments = new Object[parts.length - 1];
+        int argStart = 1;
+        if (!address.startsWith("/")) {
+            outputName = parts[0];
+            if (parts.length < 2) {
+                host.println("OSC command requires an address after the output name.");
+                return;
+            }
+            address = parts[1];
+            argStart = 2;
+        }
 
-        for (int i = 1; i < parts.length; i++) {
+        Object[] arguments = new Object[parts.length - argStart];
+        for (int i = argStart; i < parts.length; i++) {
             try {
-                arguments[i - 1] = Integer.parseInt(parts[i]);
+                arguments[i - argStart] = Integer.parseInt(parts[i]);
             } catch (NumberFormatException e1) {
                 try {
-                    arguments[i - 1] = Float.parseFloat(parts[i]);
+                    arguments[i - argStart] = Float.parseFloat(parts[i]);
                 } catch (NumberFormatException e2) {
-                    arguments[i - 1] = parts[i];
+                    arguments[i - argStart] = parts[i];
                 }
             }
         }
 
-        host.println("Sending OSC to " + oscIp + ":" + oscPort + " → " + address + " " + Arrays.toString(arguments));
+        sendOscMessageToOutput(outputName, address, arguments);
+    }
+
+    private void sendOscMessageToOutput(String outputName, String address, Object[] arguments) {
+        String key = resolveOscOutputKey(outputName);
+        OscOutput output = oscOutputs.get(key);
+        if (output == null) {
+            host.println("OSC output not found: " + outputName);
+            return;
+        }
+        if (!output.enabled || output.connection == null) {
+            host.println("OSC output disabled: " + output.name);
+            return;
+        }
+        host.println("Sending OSC to " + output.host + ":" + output.port + " (" + output.name + ") → " + address + " " + Arrays.toString(arguments));
         try {
-            oscSender.sendMessage(address, arguments);
+            output.connection.sendMessage(address, arguments);
         } catch (IOException e) {
             host.println("Error sending OSC message: " + e.getMessage());
         }
+    }
+
+    public void sendOscMessageToNamedOutput(String outputName, String address, List<Object> arguments) {
+        Object[] args = arguments == null ? new Object[0] : arguments.toArray();
+        sendOscMessageToOutput(outputName, address, args);
     }
 
     private int midiNoteFromString(String note) {
@@ -737,13 +849,7 @@ public class BitXFunctions {
 
         // AFTER sceneBank.scrollIntoView(foundScene);
 
-        try {
-            // New format: /bitx/jumpScene <trackIndex> <sceneIndex>
-            oscSender.sendMessage("/bitx/jumpScene", new Object[]{ trackIndex, foundScene });
-            host.println("BitX: sent /bitx/jumpScene " + trackIndex + " " + foundScene);
-        } catch (IOException e) {
-            host.println("BitX: failed to send jumpScene OSC: " + e.getMessage());
-        }
+        sendOscMessageToOutput(defaultOscOutput, "/bitx/jumpScene", new Object[]{ trackIndex, foundScene });
 
 
         host.showPopupNotification("Jumped to \"" + targetTrackName + "\" / \"" + targetClipName + "\"");

@@ -75,6 +75,44 @@ In Bitwig’s **Controller Preferences**, you’ll find:
 
 ---
 
+## 🎛 OSC T-1 Output (TouchOSC, TouchDesigner, etc.)
+
+BitX can forward Torso T-1 OSC and also emit per-knob name/value updates so external apps can bind controls.
+
+### Setup
+
+1. In **Preferences → OSC**, set your OSC outputs (host/port) and enable them.
+2. Pick **BitxTorsoT-1 Output** to choose which output receives the T-1 data.
+3. Restart the controller after changing output settings.
+
+### Incoming (from Torso T-1)
+
+BitX listens for:
+
+```
+/torsot1script/cc <channel> <cc> <value> <targetType> <targetTrack> <targetPage> <label>
+```
+
+This message updates the display and triggers the outgoing T-1 snapshot below.
+
+### Outgoing (from BitX)
+
+When a T-1 message is received, BitX sends:
+
+```
+/bitx/t1/page <pageName>
+/bitx/t1/knob1 <value> <name>
+/bitx/t1/knob2 <value> <name>
+...
+/bitx/t1/knob8 <value> <name>
+```
+
+Notes:
+- `value` is normalized 0.0..1.0.
+- If a slot has no remote, `name` is `"0"` and `value` is `0.0`.
+
+---
+
 ## 🧩 Command Reference
 
 ### 1. 🎚 Transport & Timing
