@@ -12,11 +12,6 @@ BPM, sends, instruments, FX racks, note filters, external synths via Program Cha
 
 ---
 
-If you just want to run the app:
-download BitX (master extension for the displayapp) from https://personalaudio.lemonsqueezy.com/
-
-Put the whole PerSonal folder inside the Bitwig Studio Extensions folder.
-
 
 ## 🚀 Installation
 
