@@ -12,19 +12,22 @@ BPM, sends, instruments, FX racks, note filters, external synths via Program Cha
 
 ---
 
+If you just want to run the app:
+download BitX (master extension for the displayapp) from https://personalaudio.lemonsqueezy.com/
+
+Put the whole PerSonal folder inside the Bitwig Studio Extensions folder.
+
+
 ## 🚀 Installation
 
-1. **Download** the built BitX extension (`.bwextension` or packaged folder).  
-2. **Place** it in your  
-   ```
-   Bitwig Studio/Extensions
-   ```
+1. **Download** https://personalaudio.lemonsqueezy.com/
+2. **Place** Put the whole PerSonal folder inside the Bitwig Studio Extensions folder.
 3. **Restart Bitwig**, then go to  
    **Settings → Controllers → Add Controller → BitX**  
    (or whatever you named it).
 
 > 💡 **macOS Silicon:**  
-> The external display app is signed, but macOS might block it the first time.  
+> The optional external display app is signed, but macOS might block it the first time.  
 > Go to **System Settings → Security & Privacy** and click **Allow**.
 
 You don’t have to compile the project — just drop in the compiled extension.
@@ -71,21 +74,22 @@ In Bitwig’s **Controller Preferences**, you’ll find:
 | Number of sends | Sends per track | 4 |
 | Display Window | Show/hide external JavaFX window | Off |
 | OSC Send IP / Port | OSC target | 127.0.0.1 : 8000 |
-| Support BitX | Opens Patreon link ❤️ | – |
+| OSC Cursor Remotes Output | Which OSC output receives cursor remotes | Output 1 |
+| Support me | Opens support link ❤️ | – |
 
 ---
 
-## 🎛 OSC T-1 Output (TouchOSC, TouchDesigner, etc.)
+## 🎛 OSC Cursor Remotes Output (TouchOSC, TouchDesigner, etc.)
 
-BitX can forward Torso T-1 OSC and also emit per-knob name/value updates so external apps can bind controls.
+BitX can emit the currently active **Remote Controls** page (selected device / track remote / project remote) so external apps can bind controls in sync with Bitwig.
 
 ### Setup
 
 1. In **Preferences → OSC**, set your OSC outputs (host/port) and enable them.
-2. Pick **BitxTorsoT-1 Output** to choose which output receives the T-1 data.
+2. Pick **Bitx Cursor Remotes Output** to choose which output receives the cursor remotes data.
 3. Restart the controller after changing output settings.
 
-### Incoming (from Torso T-1)
+### Incoming (optional, from Torso T-1)
 
 BitX listens for:
 
@@ -93,18 +97,18 @@ BitX listens for:
 /torsot1script/cc <channel> <cc> <value> <targetType> <targetTrack> <targetPage> <label>
 ```
 
-This message updates the display and triggers the outgoing T-1 snapshot below.
+This message updates the display and can trigger a cursor‑remotes snapshot, but the output also updates when the active Remote Controls page or values change.
 
 ### Outgoing (from BitX)
 
-When a T-1 message is received, BitX sends:
+BitX sends:
 
 ```
-/bitx/t1/page <pageName>
-/bitx/t1/knob1 <value> <name>
-/bitx/t1/knob2 <value> <name>
+/bitx/cursorremotes/page <pageName>
+/bitx/cursorremotes/knob1 <value> <name>
+/bitx/cursorremotes/knob2 <value> <name>
 ...
-/bitx/t1/knob8 <value> <name>
+/bitx/cursorremotes/knob8 <value> <name>
 ```
 
 Notes:
@@ -365,4 +369,4 @@ Channels: 1–16
 Developed by **Creating Spaces**  
 🎶 Musician • 🧠 Developer • 💫 Space Creator
 
-Support on [**Patreon**](https://patreon.com/CreatingSpaces) 💖
+Support at https://personalaudio.lemonsqueezy.com/ 💖
