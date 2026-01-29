@@ -16,7 +16,7 @@ BPM, sends, instruments, FX racks, note filters, external synths via Program Cha
 ## 🚀 Installation
 
 1. **Download** https://personalaudio.lemonsqueezy.com/
-2. **Place** Create a 'PerSonal' folder inside the Bitwig Studio Extensions folder and places the scripts inside of it
+2. **Create** a 'PerSonal' folder inside the Bitwig Studio Extensions folder and places the scripts inside of it
 3. **Restart Bitwig**, then go to  
    **Settings → Controllers → Add Controller → Per-Sonal → BitX**  
 
