@@ -16,12 +16,11 @@ BPM, sends, instruments, FX racks, note filters, external synths via Program Cha
 ## 🚀 Installation
 
 1. **Download** https://personalaudio.lemonsqueezy.com/
-2. **Place** Put the whole PerSonal folder inside the Bitwig Studio Extensions folder.
+2. **Place** Create a 'PerSonal' folder inside the Bitwig Studio Extensions folder and places the scripts inside of it
 3. **Restart Bitwig**, then go to  
    **Settings → Controllers → Add Controller → Per-Sonal → BitX**  
-   (or whatever you named it).
 
-> 💡 **macOS Silicon:**  
+> 💡 **Optional DisplayApp only for MacOS:**  
 > The optional external display app is signed, but macOS might block it the first time.  
 > Go to **System Settings → Security & Privacy** and click **Allow**.
 
