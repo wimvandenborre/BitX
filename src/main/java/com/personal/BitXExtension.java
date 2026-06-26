@@ -9,6 +9,7 @@ import com.bitwig.extension.api.opensoundcontrol.OscModule;
 import com.bitwig.extension.api.opensoundcontrol.OscServer;
 import com.bitwig.extension.controller.ControllerExtension;
 import com.bitwig.extension.controller.api.*;
+import com.personal.chords.ChordDetector;
 
 
 public class BitXExtension extends ControllerExtension {
@@ -63,6 +64,9 @@ public class BitXExtension extends ControllerExtension {
     private CursorRemoteControlsPage[] trackSelectedDevicePages;
     private CursorRemoteControlsPage[] trackRemotePages;
     private CursorRemoteControlsPage projectRemotePage;
+    private final ChordDetector chordDetector = new ChordDetector();
+    private String lastPlayingNotesDisplay = "";
+    private String lastPlayingChordDisplay = "";
 
     private CursorRemoteControlsPage[][] cursorRemoteControlsPages;
     private CursorRemoteControlsPage[][] fxCursorRemoteControlsPages;
@@ -192,7 +196,6 @@ public class BitXExtension extends ControllerExtension {
 
     @Override
     public void init() {
-
         final ControllerHost host = getHost();
         documentState = host.getDocumentState();
 
@@ -480,6 +483,7 @@ public class BitXExtension extends ControllerExtension {
         }
 
         selectedCursorTrack = host.createCursorTrack("RemoteControlsTrack", "Selected Track", 0, 0, true);
+        selectedCursorTrack.playingNotes().addValueObserver(this::updateSelectedTrackPlayingNotes);
         cursorDevice = selectedCursorTrack.createCursorDevice(
                 "RemoteControlsDevice",
                 "Selected Device",
@@ -1333,6 +1337,30 @@ public class BitXExtension extends ControllerExtension {
                 OSC_CURSOR_REMOTES_KNOB_ADDRESS + (index + 1),
                 args
         );
+    }
+
+    private void updateSelectedTrackPlayingNotes(PlayingNote[] playingNotes) {
+        List<Integer> notes = new ArrayList<>();
+        if (playingNotes != null) {
+            for (PlayingNote playingNote : playingNotes) {
+                if (playingNote != null && playingNote.velocity() > 0) {
+                    notes.add(playingNote.pitch());
+                }
+            }
+        }
+
+        ChordDetector.ChordResult chordResult = chordDetector.detect(notes);
+        String noteNames = String.join(" ", chordResult.midiNoteNames());
+        String chordName = chordResult.chordName();
+
+        if (!noteNames.equals(lastPlayingNotesDisplay)) {
+            lastPlayingNotesDisplay = noteNames;
+            bitXGraphics.sendDataToJavaFX("PLAYING_NOTES:" + noteNames);
+        }
+        if (!chordName.equals(lastPlayingChordDisplay)) {
+            lastPlayingChordDisplay = chordName;
+            bitXGraphics.sendDataToJavaFX("PLAYING_CHORD:" + chordName);
+        }
     }
 
     private String displaySourceSelectedDeviceTrack(int trackIndex) {
