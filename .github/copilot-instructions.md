@@ -59,8 +59,8 @@ mvn clean install
 **Output:** Built automatically to `/Users/wimvandenborre/Documents/Bitwig Studio/Extensions/PerSonal/BitX.bwextension` via copy-rename plugin in pom.xml
 
 **Build Details:**
-- Java 21 (release config in maven-compiler-plugin)
-- Dependencies: Bitwig API v20, JavaFX 23.0.2
+- Java 25 (release config in maven-compiler-plugin)
+- Dependencies: Bitwig API v25, JavaFX 23.0.2
 - Generated sources from `src/generated-sources/bitwigapi/` added via build-helper-plugin
 - JAR packaged as `.bwextension` (Bitwig's extension format)
 

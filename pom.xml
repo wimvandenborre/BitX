@@ -52,17 +52,17 @@
 			</resource>
 		</resources>
 		<plugins>
-			  <plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-compiler-plugin</artifactId>
-					<version>3.11.0</version>
-					<configuration>
-						<fork>true</fork>
-						<release>21</release>
-						<encoding>UTF-8</encoding>
-					</configuration>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.11.0</version>
+				<configuration>
+					<fork>true</fork>
+					<release>25</release>
+					<encoding>UTF-8</encoding>
+				</configuration>
 			</plugin>
-		
+
 			<plugin>
 				<groupId>com.coderplus.maven.plugins</groupId>
 				<artifactId>copy-rename-maven-plugin</artifactId>
