@@ -20,9 +20,12 @@ BPM, sends, instruments, FX racks, note filters, external synths via Program Cha
 3. **Restart Bitwig**, then go to  
    **Settings → Controllers → Add Controller → Per-Sonal → BitX**  
 
-> 💡 **Optional DisplayApp only for MacOS:**  
-> The optional external display app is signed, but macOS might block it the first time.  
-> Go to **System Settings → Security & Privacy** and click **Allow**.
+> 💡 **Optional DisplayApp for macOS and Windows:**
+> Place the packaged display beside `BitX.bwextension` in the `PerSonal`
+> extension folder. On Windows, copy the complete `BitXDisplayApp` directory;
+> on macOS, copy `BitXDisplayApp.app`. The Windows package includes its own Java
+> runtime. macOS might block the signed app the first time; go to
+> **System Settings → Security & Privacy** and click **Allow**.
 
 You don’t have to compile the project — just drop in the compiled extension.
 

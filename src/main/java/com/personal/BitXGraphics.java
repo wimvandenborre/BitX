@@ -2,11 +2,15 @@ package com.personal;
 
 import com.bitwig.extension.controller.api.*;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BitXGraphics {
     private final ControllerHost host;
@@ -21,14 +25,11 @@ public class BitXGraphics {
              OutputStream outputStream = socket.getOutputStream();
              PrintWriter writer = new PrintWriter(outputStream, true)) {
 
-            // Normalize 0-1 to 0-255 for JavaFX
             int red = (int) (r * 255);
             int green = (int) (g * 255);
             int blue = (int) (b * 255);
 
             writer.println("COLOR:" + trackIndex + ":" + red + ":" + green + ":" + blue);
-           // host.println("Sent Track Color to JavaFX: Track " + trackIndex + ", RGB(" + red + "," + green + "," + blue + ")");
-
         } catch (Exception e) {
             host.println("Error sending Track Color: " + e.getMessage());
         }
@@ -39,9 +40,8 @@ public class BitXGraphics {
              OutputStream outputStream = socket.getOutputStream();
              PrintWriter writer = new PrintWriter(outputStream, true)) {
             writer.println("VU:" + trackIndex + ":" + vuValue);
-
-        } catch (Exception e) {
-          //  host.println("Error sending VU data: " + e.getMessage());
+        } catch (Exception ignored) {
+            // The display is optional and may not be running.
         }
     }
 
@@ -50,50 +50,93 @@ public class BitXGraphics {
              OutputStream outputStream = socket.getOutputStream();
              PrintWriter writer = new PrintWriter(outputStream, true)) {
             writer.println(message);
-
-        } catch (Exception e) {
-           // host.println("Error sending data to JavaFX: " + e.getMessage());
+        } catch (Exception ignored) {
+            // The display is optional and may not be running.
         }
     }
 
-  // Store as class variable
-
     void startDisplayProcess() {
-        if (displayProcess != null && displayProcess.isAlive()) {
-            return; // Already running
+        if (isDisplayRunning() || (displayProcess != null && displayProcess.isAlive())) {
+            return;
         }
 
         new Thread(() -> {
             try {
-                ProcessBuilder pb = new ProcessBuilder(
-                        "open",
-                        System.getProperty("user.home") + "/Documents/Bitwig Studio/Extensions/PerSonal/BitXDisplayApp.app"
-                ).inheritIO();
-
-                pb.redirectErrorStream(true);
-                displayProcess = pb.start();
-
-                // Consume output in a background thread
-                new Thread(() -> {
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(displayProcess.getInputStream()))) {
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                         //   host.println("JavaFX: " + line);
-                        }
-                    } catch (Exception e) {
-                   //     host.println("Error reading JavaFX output: " + e.getMessage());
-                    }
-                }).start();
-
-              Thread.sleep(1000); // 🔄 Give JavaFX time to load
-
-                // **Resend Actual Track Colors** After JavaFX Has Started
-             //   host.println("Resending track colors to JavaFX...");
-
+                displayProcess = createDisplayProcessBuilder().inheritIO().start();
+                Thread.sleep(1000);
             } catch (Exception e) {
                 host.println("Error starting JavaFX app: " + e.getMessage());
+                host.showPopupNotification("BitX Display could not be started. Check the controller log.");
             }
-        }).start();
+        }, "BitX Display Launcher").start();
     }
 
+    private ProcessBuilder createDisplayProcessBuilder() {
+        if (host.platformIsWindows()) {
+            Path executable = findWindowsDisplayExecutable();
+            if (executable == null) {
+                throw new IllegalStateException(
+                        "BitXDisplayApp.exe was not found in the PerSonal extension folder"
+                );
+            }
+            return new ProcessBuilder(executable.toString());
+        }
+
+        if (host.platformIsMac()) {
+            Path application = Paths.get(
+                    System.getProperty("user.home"),
+                    "Documents",
+                    "Bitwig Studio",
+                    "Extensions",
+                    "PerSonal",
+                    "BitXDisplayApp.app"
+            );
+            if (!Files.isDirectory(application)) {
+                throw new IllegalStateException("BitXDisplayApp.app was not found at " + application);
+            }
+            return new ProcessBuilder("open", application.toString());
+        }
+
+        throw new IllegalStateException("BitX Display is not packaged for this operating system");
+    }
+
+    private Path findWindowsDisplayExecutable() {
+        List<Path> documentRoots = new ArrayList<>();
+        documentRoots.add(Paths.get(System.getProperty("user.home"), "Documents"));
+        addOneDriveDocuments(documentRoots, "OneDrive");
+        addOneDriveDocuments(documentRoots, "OneDriveConsumer");
+        addOneDriveDocuments(documentRoots, "OneDriveCommercial");
+
+        for (Path documents : documentRoots) {
+            Path executable = documents.resolve(
+                    Paths.get(
+                            "Bitwig Studio",
+                            "Extensions",
+                            "PerSonal",
+                            "BitXDisplayApp",
+                            "BitXDisplayApp.exe"
+                    )
+            );
+            if (Files.isRegularFile(executable)) {
+                return executable;
+            }
+        }
+        return null;
+    }
+
+    private void addOneDriveDocuments(List<Path> documentRoots, String environmentVariable) {
+        String oneDriveRoot = System.getenv(environmentVariable);
+        if (oneDriveRoot != null && !oneDriveRoot.isBlank()) {
+            documentRoots.add(Paths.get(oneDriveRoot, "Documents"));
+        }
+    }
+
+    private boolean isDisplayRunning() {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", 9876), 200);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
 }
