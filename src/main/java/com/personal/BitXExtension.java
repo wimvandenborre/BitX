@@ -17,7 +17,12 @@ public class BitXExtension extends ControllerExtension {
     private static int MAX_SCENES = 128;
     private static int MAX_LAYERS = 32;
     private static int MAX_SENDS = 16;
-    private static final String OSC_CATEGORY = "OSC";
+    private static final String OSC_INPUT_CATEGORY = "OSC - Input";
+    private static final String OSC_TOUCHDESIGNER_CATEGORY = "OSC - TouchDesigner";
+    private static final String OSC_LAUNCHPAD_CATEGORY = "OSC - Launchpad";
+    private static final String OSC_CUSTOM_1_CATEGORY = "OSC - Custom 1";
+    private static final String OSC_CUSTOM_2_CATEGORY = "OSC - Custom 2";
+    private static final String OSC_ROUTING_CATEGORY = "OSC - Routing";
     private static final int OSC_PORT_MIN = 1;
     private static final int OSC_PORT_MAX = 65535;
     private static final int DEFAULT_OSC_IN_PORT = 9000;
@@ -25,6 +30,16 @@ public class BitXExtension extends ControllerExtension {
     private static final String DEFAULT_OSC_OUT_HOST = "127.0.0.1";
     private static final boolean DEFAULT_OSC_IN_ENABLED = true;
     private static final boolean DEFAULT_OSC_OUT_ENABLED = true;
+    private static final String OSC_OUTPUT_TOUCHDESIGNER = "TouchDesigner";
+    private static final String OSC_OUTPUT_LAUNCHPAD = "Launchpad";
+    private static final String OSC_OUTPUT_CUSTOM_1 = "Custom 1";
+    private static final String OSC_OUTPUT_CUSTOM_2 = "Custom 2";
+    private static final String[] OSC_OUTPUT_CHOICES = {
+            OSC_OUTPUT_TOUCHDESIGNER,
+            OSC_OUTPUT_LAUNCHPAD,
+            OSC_OUTPUT_CUSTOM_1,
+            OSC_OUTPUT_CUSTOM_2
+    };
     private static final String OSC_TORSO_T1_ADDRESS = "/torsot1script/cc";
     private static final String OSC_TARGET_SELECTED_DEVICE = "selecteddevice";
     private static final String OSC_TARGET_TRACK_REMOTE = "trackremote";
@@ -95,17 +110,18 @@ public class BitXExtension extends ControllerExtension {
     //Preference settings in control Panel
     private Preferences prefs;
     private SettableStringValue oscOutHostSetting;
-    private SettableStringValue oscOutNameSetting;
     private SettableStringValue oscOut2HostSetting;
-    private SettableStringValue oscOut2NameSetting;
     private SettableStringValue oscOut3HostSetting;
     private SettableStringValue oscOut3NameSetting;
-    private SettableRangedValue instrumentSelectorPosition, fxSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting, oscOutPortSetting, oscOut2PortSetting, oscOut3PortSetting, oscInPortSetting, sendNumberSetting;
+    private SettableStringValue oscOut4HostSetting;
+    private SettableStringValue oscOut4NameSetting;
+    private SettableRangedValue instrumentSelectorPosition, fxSelectorPosition, widthSetting, heightSetting, tracknNumberSetting, sceneNumberSetting, layerNumberSetting, oscOutPortSetting, oscOut2PortSetting, oscOut3PortSetting, oscOut4PortSetting, oscInPortSetting, sendNumberSetting;
     private SettableBooleanValue displayWindowShowSetting;
     private SettableBooleanValue oscInEnabledSetting;
     private SettableBooleanValue oscOutEnabledSetting;
     private SettableBooleanValue oscOut2EnabledSetting;
     private SettableBooleanValue oscOut3EnabledSetting;
+    private SettableBooleanValue oscOut4EnabledSetting;
     private SettableEnumValue oscDefaultOutputSetting;
     private SettableEnumValue oscCursorRemotesOutputSetting;
     private Signal button_openPatreon, button_randomizeDevice;
@@ -135,16 +151,20 @@ public class BitXExtension extends ControllerExtension {
     private int oscOutPort;
     private int oscOut2Port;
     private int oscOut3Port;
+    private int oscOut4Port;
     private String oscOutHost;
     private String oscOutName;
     private String oscOut2Host;
     private String oscOut2Name;
     private String oscOut3Host;
     private String oscOut3Name;
+    private String oscOut4Host;
+    private String oscOut4Name;
     private boolean oscInEnabled;
     private boolean oscOutEnabled;
     private boolean oscOut2Enabled;
     private boolean oscOut3Enabled;
+    private boolean oscOut4Enabled;
     private String defaultOscOutputName;
     private String cursorRemotesOscOutputName;
 
@@ -252,31 +272,37 @@ public class BitXExtension extends ControllerExtension {
         layerNumberSetting = prefs.getNumberSetting("Number of layers", "Display", 1, 64, 1, "layers", 32);
         sendNumberSetting = prefs.getNumberSetting("Number of sends", "Display", 1, 16, 1, "sends", 4);
         displayWindowShowSetting = prefs.getBooleanSetting("Display Window", "Display", false);
-        oscInEnabledSetting = prefs.getBooleanSetting("OSC In Enabled", OSC_CATEGORY, DEFAULT_OSC_IN_ENABLED);
-        oscInPortSetting = prefs.getNumberSetting("OSC In Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_IN_PORT);
-        oscOutNameSetting = prefs.getStringSetting("OSC Out 1 Name", OSC_CATEGORY, 32, "TouchDesigner");
-        oscOutHostSetting = prefs.getStringSetting("OSC Out 1 Host", OSC_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
-        oscOutPortSetting = prefs.getNumberSetting("OSC Out 1 Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT);
-        oscOutEnabledSetting = prefs.getBooleanSetting("OSC Out 1 Enabled", OSC_CATEGORY, DEFAULT_OSC_OUT_ENABLED);
-        oscOut2NameSetting = prefs.getStringSetting("OSC Out 2 Name", OSC_CATEGORY, 32, "TouchOSC");
-        oscOut2HostSetting = prefs.getStringSetting("OSC Out 2 Host", OSC_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
-        oscOut2EnabledSetting = prefs.getBooleanSetting("OSC Out 2 Enabled", OSC_CATEGORY, false);
-        oscOut3NameSetting = prefs.getStringSetting("OSC Out 3 Name", OSC_CATEGORY, 32, "Output3");
-        oscOut3HostSetting = prefs.getStringSetting("OSC Out 3 Host", OSC_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
-        oscOut3PortSetting = prefs.getNumberSetting("OSC Out 3 Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT + 2);
-        oscOut3EnabledSetting = prefs.getBooleanSetting("OSC Out 3 Enabled", OSC_CATEGORY, false);
-        oscOut2PortSetting = prefs.getNumberSetting("OSC Out 2 Port", OSC_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT + 1);
+        oscInEnabledSetting = prefs.getBooleanSetting("Enabled", OSC_INPUT_CATEGORY, DEFAULT_OSC_IN_ENABLED);
+        oscInPortSetting = prefs.getNumberSetting("Port", OSC_INPUT_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_IN_PORT);
+
+        oscOutHostSetting = prefs.getStringSetting("Host", OSC_TOUCHDESIGNER_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
+        oscOutPortSetting = prefs.getNumberSetting("Port", OSC_TOUCHDESIGNER_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT);
+        oscOutEnabledSetting = prefs.getBooleanSetting("Enabled", OSC_TOUCHDESIGNER_CATEGORY, DEFAULT_OSC_OUT_ENABLED);
+
+        oscOut2HostSetting = prefs.getStringSetting("Host", OSC_LAUNCHPAD_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
+        oscOut2PortSetting = prefs.getNumberSetting("Port", OSC_LAUNCHPAD_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT + 1);
+        oscOut2EnabledSetting = prefs.getBooleanSetting("Enabled", OSC_LAUNCHPAD_CATEGORY, false);
+
+        oscOut3NameSetting = prefs.getStringSetting("Name", OSC_CUSTOM_1_CATEGORY, 32, OSC_OUTPUT_CUSTOM_1);
+        oscOut3HostSetting = prefs.getStringSetting("Host", OSC_CUSTOM_1_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
+        oscOut3PortSetting = prefs.getNumberSetting("Port", OSC_CUSTOM_1_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT + 2);
+        oscOut3EnabledSetting = prefs.getBooleanSetting("Enabled", OSC_CUSTOM_1_CATEGORY, false);
+
+        oscOut4NameSetting = prefs.getStringSetting("Name", OSC_CUSTOM_2_CATEGORY, 32, OSC_OUTPUT_CUSTOM_2);
+        oscOut4HostSetting = prefs.getStringSetting("Host", OSC_CUSTOM_2_CATEGORY, 64, DEFAULT_OSC_OUT_HOST);
+        oscOut4PortSetting = prefs.getNumberSetting("Port", OSC_CUSTOM_2_CATEGORY, OSC_PORT_MIN, OSC_PORT_MAX, 1, "", DEFAULT_OSC_OUT_PORT + 3);
+        oscOut4EnabledSetting = prefs.getBooleanSetting("Enabled", OSC_CUSTOM_2_CATEGORY, false);
         oscCursorRemotesOutputSetting = prefs.getEnumSetting(
                 "Bitx Cursor Remotes Output",
-                OSC_CATEGORY,
-                new String[]{"Output 1", "Output 2", "Output 3"},
-                "Output 1"
+                OSC_ROUTING_CATEGORY,
+                OSC_OUTPUT_CHOICES,
+                OSC_OUTPUT_TOUCHDESIGNER
         );
         oscDefaultOutputSetting = prefs.getEnumSetting(
                 "OSC Default Output",
-                OSC_CATEGORY,
-                new String[]{"Output 1", "Output 2", "Output 3"},
-                "Output 1"
+                OSC_ROUTING_CATEGORY,
+                OSC_OUTPUT_CHOICES,
+                OSC_OUTPUT_TOUCHDESIGNER
         );
         button_openPatreon = prefs.getSignalSetting("Support me", "Support", "Open personalaudio.lemonsqueezy.com");
         button_openPatreon.addSignalObserver(() -> openSupportPage(host));
@@ -292,16 +318,20 @@ public class BitXExtension extends ControllerExtension {
         oscOutPort = (int) Math.round(oscOutPortSetting.getRaw());
         oscOut2Port = (int) Math.round(oscOut2PortSetting.getRaw());
         oscOut3Port = (int) Math.round(oscOut3PortSetting.getRaw());
+        oscOut4Port = (int) Math.round(oscOut4PortSetting.getRaw());
         oscOutHost = oscOutHostSetting.get();
         oscOut2Host = oscOut2HostSetting.get();
         oscOut3Host = oscOut3HostSetting.get();
-        oscOutName = oscOutNameSetting.get();
-        oscOut2Name = oscOut2NameSetting.get();
+        oscOut4Host = oscOut4HostSetting.get();
+        oscOutName = OSC_OUTPUT_TOUCHDESIGNER;
+        oscOut2Name = OSC_OUTPUT_LAUNCHPAD;
         oscOut3Name = oscOut3NameSetting.get();
+        oscOut4Name = oscOut4NameSetting.get();
         oscInEnabled = oscInEnabledSetting.get();
         oscOutEnabled = oscOutEnabledSetting.get();
         oscOut2Enabled = oscOut2EnabledSetting.get();
         oscOut3Enabled = oscOut3EnabledSetting.get();
+        oscOut4Enabled = oscOut4EnabledSetting.get();
         defaultOscOutputName = oscDefaultOutputSetting.get();
         cursorRemotesOscOutputName = oscCursorRemotesOutputSetting.get();
         if (oscInPort <= 0) {
@@ -316,6 +346,9 @@ public class BitXExtension extends ControllerExtension {
         if (oscOut3Port <= 0) {
             oscOut3Port = DEFAULT_OSC_OUT_PORT + 2;
         }
+        if (oscOut4Port <= 0) {
+            oscOut4Port = DEFAULT_OSC_OUT_PORT + 3;
+        }
         if (oscOutHost == null || oscOutHost.trim().isEmpty()) {
             oscOutHost = DEFAULT_OSC_OUT_HOST;
         }
@@ -325,28 +358,24 @@ public class BitXExtension extends ControllerExtension {
         if (oscOut3Host == null || oscOut3Host.trim().isEmpty()) {
             oscOut3Host = DEFAULT_OSC_OUT_HOST;
         }
-        if (oscOutName == null || oscOutName.trim().isEmpty()) {
-            oscOutName = "Output 1";
-        }
-        if (oscOut2Name == null || oscOut2Name.trim().isEmpty()) {
-            oscOut2Name = "Output 2";
+        if (oscOut4Host == null || oscOut4Host.trim().isEmpty()) {
+            oscOut4Host = DEFAULT_OSC_OUT_HOST;
         }
         if (oscOut3Name == null || oscOut3Name.trim().isEmpty()) {
-            oscOut3Name = "Output 3";
+            oscOut3Name = OSC_OUTPUT_CUSTOM_1;
+        }
+        if (oscOut4Name == null || oscOut4Name.trim().isEmpty()) {
+            oscOut4Name = OSC_OUTPUT_CUSTOM_2;
         }
         if (defaultOscOutputName == null || defaultOscOutputName.trim().isEmpty()) {
-            defaultOscOutputName = "Output 1";
+            defaultOscOutputName = OSC_OUTPUT_TOUCHDESIGNER;
         }
         if (cursorRemotesOscOutputName == null || cursorRemotesOscOutputName.trim().isEmpty()) {
-            cursorRemotesOscOutputName = "Output 1";
+            cursorRemotesOscOutputName = OSC_OUTPUT_TOUCHDESIGNER;
         }
         oscInPortSetting.addRawValueObserver(value -> {
             oscInPort = (int) Math.round(value);
             refreshOscServer();
-        });
-        oscOutNameSetting.addValueObserver(value -> {
-            oscOutName = value;
-            notifyOscRestartRequired();
         });
         oscOutPortSetting.addRawValueObserver(value -> {
             oscOutPort = (int) Math.round(value);
@@ -354,10 +383,6 @@ public class BitXExtension extends ControllerExtension {
         });
         oscOutHostSetting.addValueObserver(value -> {
             oscOutHost = value;
-            notifyOscRestartRequired();
-        });
-        oscOut2NameSetting.addValueObserver(value -> {
-            oscOut2Name = value;
             notifyOscRestartRequired();
         });
         oscOut2PortSetting.addRawValueObserver(value -> {
@@ -380,6 +405,18 @@ public class BitXExtension extends ControllerExtension {
             oscOut3Host = value;
             notifyOscRestartRequired();
         });
+        oscOut4NameSetting.addValueObserver(value -> {
+            oscOut4Name = value;
+            notifyOscRestartRequired();
+        });
+        oscOut4PortSetting.addRawValueObserver(value -> {
+            oscOut4Port = (int) Math.round(value);
+            notifyOscRestartRequired();
+        });
+        oscOut4HostSetting.addValueObserver(value -> {
+            oscOut4Host = value;
+            notifyOscRestartRequired();
+        });
         oscInEnabledSetting.addValueObserver(value -> {
             oscInEnabled = value;
             refreshOscServer();
@@ -394,6 +431,10 @@ public class BitXExtension extends ControllerExtension {
         });
         oscOut3EnabledSetting.addValueObserver(value -> {
             oscOut3Enabled = value;
+            notifyOscRestartRequired();
+        });
+        oscOut4EnabledSetting.addValueObserver(value -> {
+            oscOut4Enabled = value;
             notifyOscRestartRequired();
         });
         oscDefaultOutputSetting.addValueObserver(value -> {
@@ -665,21 +706,28 @@ public class BitXExtension extends ControllerExtension {
                 oscOutHost,
                 oscOutPort,
                 oscOutEnabled,
-                Arrays.asList(oscOutName, "1", "out1", "output1", "output 1")
+                Arrays.asList(oscOutName, "touchdesigner", "td", "1", "out1", "output1", "output 1")
         ));
         oscOutputs.add(new BitXFunctions.OscOutputConfig(
                 oscOut2Name,
                 oscOut2Host,
                 oscOut2Port,
                 oscOut2Enabled,
-                Arrays.asList(oscOut2Name, "2", "out2", "output2", "output 2")
+                Arrays.asList(oscOut2Name, "launchpad", "lp", "2", "out2", "output2", "output 2")
         ));
         oscOutputs.add(new BitXFunctions.OscOutputConfig(
                 oscOut3Name,
                 oscOut3Host,
                 oscOut3Port,
                 oscOut3Enabled,
-                Arrays.asList(oscOut3Name, "3", "out3", "output3", "output 3")
+                Arrays.asList(oscOut3Name, OSC_OUTPUT_CUSTOM_1, "custom1", "3", "out3", "output3", "output 3")
+        ));
+        oscOutputs.add(new BitXFunctions.OscOutputConfig(
+                oscOut4Name,
+                oscOut4Host,
+                oscOut4Port,
+                oscOut4Enabled,
+                Arrays.asList(oscOut4Name, OSC_OUTPUT_CUSTOM_2, "custom2", "4", "out4", "output4", "output 4")
         ));
         String defaultOutputName = resolveOutputName(defaultOscOutputName);
         cursorRemotesOscOutputName = resolveOutputName(cursorRemotesOscOutputName);
@@ -1058,11 +1106,14 @@ public class BitXExtension extends ControllerExtension {
     }
 
     private String resolveOutputName(String selection) {
-        if ("Output 2".equalsIgnoreCase(selection)) {
+        if (OSC_OUTPUT_LAUNCHPAD.equalsIgnoreCase(selection) || "Output 2".equalsIgnoreCase(selection)) {
             return oscOut2Name;
         }
-        if ("Output 3".equalsIgnoreCase(selection)) {
+        if (OSC_OUTPUT_CUSTOM_1.equalsIgnoreCase(selection) || "Output 3".equalsIgnoreCase(selection)) {
             return oscOut3Name;
+        }
+        if (OSC_OUTPUT_CUSTOM_2.equalsIgnoreCase(selection) || "Output 4".equalsIgnoreCase(selection)) {
+            return oscOut4Name;
         }
         return oscOutName;
     }

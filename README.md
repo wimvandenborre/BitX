@@ -70,21 +70,27 @@ In Bitwig’s **Controller Preferences**, you’ll find:
 | Number of layers | Layers per selector | 32 |
 | Number of sends | Sends per track | 4 |
 | Display Window | Show/hide external JavaFX window | Off |
-| OSC Send IP / Port | OSC target | 127.0.0.1 : 8000 |
-| OSC Cursor Remotes Output | Which OSC output receives cursor remotes | Output 1 |
+| TouchDesigner Host / Port | Dedicated TouchDesigner OSC target | 127.0.0.1 : 8000 |
+| Launchpad Host / Port | Dedicated Launchpad OSC target | 127.0.0.1 : 8001 |
+| Custom 1 Name / Host / Port | First user-defined OSC target | Custom 1 / 127.0.0.1 : 8002 |
+| Custom 2 Name / Host / Port | Second user-defined OSC target | Custom 2 / 127.0.0.1 : 8003 |
+| OSC Cursor Remotes Output | Which OSC output receives cursor remotes | TouchDesigner |
 | Support me | Opens support link ❤️ | – |
 
 ---
 
-## 🎛 OSC Cursor Remotes Output (TouchOSC, TouchDesigner, etc.)
+## 🎛 OSC outputs and Cursor Remotes
 
 BitX can emit the currently active **Remote Controls** page (selected device / track remote / project remote) so external apps can bind controls in sync with Bitwig.
 
 ### Setup
 
-1. In **Preferences → OSC**, set your OSC outputs (host/port) and enable them.
-2. Pick **Bitx Cursor Remotes Output** to choose which output receives the cursor remotes data.
-3. Restart the controller after changing output settings.
+1. In **Preferences**, configure and enable the dedicated **OSC - TouchDesigner** and **OSC - Launchpad** targets as needed.
+2. Configure **OSC - Custom 1** and **OSC - Custom 2** for any additional applications. Their names, hosts, and ports are user-editable.
+3. Under **OSC - Routing**, pick **Bitx Cursor Remotes Output** to choose which of the four targets receives cursor-remotes data. **OSC Default Output** controls OSC commands that omit a target.
+4. Restart the controller after changing output settings.
+
+Every port is selectable from 1 through 65535. OSC commands can address outputs by their configured name or by the aliases `touchdesigner`, `launchpad`, `custom1`, and `custom2`.
 
 ### Incoming (optional, from Torso T-1)
 
