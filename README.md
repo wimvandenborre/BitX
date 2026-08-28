@@ -9,6 +9,9 @@ You control your project by naming **clips** and **cue markers** with special co
 
 BitX reads those names, parses the commands, and manipulates Bitwig:
 BPM, sends, instruments, FX racks, note filters, external synths via Program Change, OSC, and more.
+Launching or quantized-retriggering an already-playing command clip executes its commands again.
+
+BitX requires **Bitwig Controller API 25**.
 
 ---
 

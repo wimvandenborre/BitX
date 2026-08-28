@@ -202,6 +202,8 @@ public class BitXExtension extends ControllerExtension {
     private final Map<Integer, List<Parameter>> trackNoteTransposeParameters = new HashMap<>();
 
     private final Map<Integer, String> cachedTrackNames = new HashMap<>();
+    private final Set<Long> playingClipSlots = new HashSet<>();
+    private final Set<Long> pendingQueuedClipLaunches = new HashSet<>();
 
     //Midi Program Change
     private final UUID mpcUUID = UUID.fromString("429c7dcb-6863-48bc-becc-508463841e3b");
@@ -888,7 +890,7 @@ public class BitXExtension extends ControllerExtension {
 
         initializeTrackAndClipObservers(host);
 
-        host.showPopupNotification("BitX Initialized");
+        host.showPopupNotification("BitX 0.1.5 (API 25) Initialized");
     }
 
 
@@ -1025,27 +1027,81 @@ public class BitXExtension extends ControllerExtension {
             ClipLauncherSlotBank clipLauncherSlotBank = track.clipLauncherSlotBank();
 
             for (int slotIndex = 0; slotIndex < MAX_SCENES; slotIndex++) {
-                final int finalSlotIndex = slotIndex;
-                ClipLauncherSlot clipSlot = clipLauncherSlotBank.getItemAt(finalSlotIndex);
+                ClipLauncherSlot clipSlot = clipLauncherSlotBank.getItemAt(slotIndex);
                 clipSlot.name().markInterested();
+            }
 
-                clipLauncherSlotBank.addIsPlayingObserver((index, isPlaying) -> {
-                    if (index == finalSlotIndex && isPlaying) {
-                        String clipName = clipSlot.name().get();
+            clipLauncherSlotBank.addIsPlayingObserver((slotIndex, isPlaying) ->
+                    handleClipPlayback(trackIndex, clipLauncherSlotBank, slotIndex, isPlaying));
+            clipLauncherSlotBank.addIsPlaybackQueuedObserver((slotIndex, isQueued) ->
+                    handleClipPlaybackQueued(host, trackIndex, clipLauncherSlotBank,
+                            slotIndex, isQueued));
+        }
+    }
 
-                        if (clipName != null && clipName.startsWith("()")) {
-                            List<CommandWithArgument> commandsToExecute = parseCommands(clipName);
-                            for (CommandWithArgument cmd : commandsToExecute) {
-                                CommandEntry entry = commands.get(cmd.command);
-                                if (entry != null) {
-                                    entry.executor.execute(cmd.argument, trackIndex);
-                                }
-                            }
-                        }
-                    }
-                });
+    private void handleClipPlayback(int trackIndex, ClipLauncherSlotBank clipLauncherSlotBank,
+                                    int slotIndex, boolean isPlaying) {
+        if (slotIndex < 0 || slotIndex >= MAX_SCENES) {
+            return;
+        }
+        long slotKey = clipSlotKey(trackIndex, slotIndex);
+        if (isPlaying) {
+            playingClipSlots.add(slotKey);
+            pendingQueuedClipLaunches.remove(slotKey);
+            executeClipCommands(trackIndex, clipLauncherSlotBank, slotIndex);
+        } else {
+            playingClipSlots.remove(slotKey);
+            pendingQueuedClipLaunches.remove(slotKey);
+        }
+    }
+
+    private void handleClipPlaybackQueued(ControllerHost host, int trackIndex,
+                                          ClipLauncherSlotBank clipLauncherSlotBank,
+                                          int slotIndex, boolean isQueued) {
+        if (slotIndex < 0 || slotIndex >= MAX_SCENES) {
+            return;
+        }
+        long slotKey = clipSlotKey(trackIndex, slotIndex);
+        if (isQueued) {
+            pendingQueuedClipLaunches.add(slotKey);
+            return;
+        }
+        if (pendingQueuedClipLaunches.contains(slotKey)) {
+            host.scheduleTask(() -> completeQueuedClipLaunch(
+                    trackIndex, clipLauncherSlotBank, slotIndex), 0);
+        }
+    }
+
+    private void completeQueuedClipLaunch(int trackIndex,
+                                          ClipLauncherSlotBank clipLauncherSlotBank,
+                                          int slotIndex) {
+        long slotKey = clipSlotKey(trackIndex, slotIndex);
+        if (pendingQueuedClipLaunches.remove(slotKey) && playingClipSlots.contains(slotKey)) {
+            executeClipCommands(trackIndex, clipLauncherSlotBank, slotIndex);
+        }
+    }
+
+    private void executeClipCommands(int trackIndex, ClipLauncherSlotBank clipLauncherSlotBank,
+                                     int slotIndex) {
+        String clipName = clipLauncherSlotBank.getItemAt(slotIndex).name().get();
+        if (clipName == null || !clipName.startsWith("()")) {
+            return;
+        }
+        for (CommandWithArgument command : parseCommands(clipName)) {
+            CommandEntry entry = commands.get(command.command);
+            if (entry != null) {
+                try {
+                    entry.executor.execute(command.argument, trackIndex);
+                } catch (RuntimeException exception) {
+                    getHost().errorln("BitX command " + command.command
+                            + " failed: " + exception.getMessage());
+                }
             }
         }
+    }
+
+    private static long clipSlotKey(int trackIndex, int slotIndex) {
+        return ((long) trackIndex << 32) | (slotIndex & 0xffffffffL);
     }
 
     private List<CommandWithArgument> parseCommands(String clipName) {

@@ -29,7 +29,7 @@ public class BitXExtensionDefinition extends ControllerExtensionDefinition
    @Override
    public String getVersion()
    {
-      return "0.1.4";
+      return "0.1.5";
    }
 
    @Override
@@ -53,7 +53,7 @@ public class BitXExtensionDefinition extends ControllerExtensionDefinition
    @Override
    public int getRequiredAPIVersion()
    {
-      return 18;
+      return 25;
    }
 
    @Override
